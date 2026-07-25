@@ -1,0 +1,21 @@
+name: ruvnet-base-station
+
+services:
+  sensing-server:
+    image: ruvnet/wifi-densepose:latest
+    container_name: ruvnet-sensing-server
+    restart: unless-stopped
+    init: true
+    environment:
+      CSI_SOURCE: esp32
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "3000:3000/tcp"
+      - "3001:3001/tcp"
+      - "5005:5005/udp"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
