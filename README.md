@@ -13,6 +13,9 @@ nodes and a Raspberry Pi 5 aggregation base station.
   and collaboration rules
 - **[Raspberry Pi 5 base-station setup](docs/PI_BASE_STATION.md)** — complete
   headless OS, NVMe, Docker, RuView, networking, and verification procedure
+- **[ESP32-S3 RuView flashing and bring-up](docs/ESP32_RUVIEW_BRINGUP.md)** —
+  matched firmware, Windows flashing, provisioning, serial checks, UDP proof,
+  and five-node rollout
 
 `CLAUDE.md` and `AGENTS.md` are thin pointers to the project guide so every
 contributor—human or agent—works from the same source.
@@ -35,5 +38,4 @@ local RuView dashboard on TCP `3000`.
 
 `.github/workflows/build.yml` is build-only. It never flashes devices or runs
 hardware-in-the-loop steps.
-
 
