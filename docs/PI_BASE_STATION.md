@@ -258,6 +258,13 @@ activity LEDs to stop, and then remove power.
 
 ## 10. Connect the ESP32 nodes
 
+Follow the complete
+[RuView ESP32-S3 flashing and bring-up guide](ESP32_RUVIEW_BRINGUP.md). It
+covers the Windows tool environment, matched firmware release assets, USB
+driver and COM-port identification, chip probing, exact 8 MB flash offsets,
+credential-aware provisioning, serial monitoring, UDP verification, unique
+node IDs, and the five-node TDM layout.
+
 When the boards arrive:
 
 1. Confirm the module shield says `ESP32-S3-WROOM-1` and `N8R8`.
@@ -331,6 +338,7 @@ recordings before deleting anything.
 - [ ] TCP `3000` and `3001`, and UDP `5005`, are listening
 - [ ] Container returns after a controlled reboot
 - [ ] No project ports are forwarded from the internet
+- [ ] Detailed ESP32 flashing guide reviewed before connecting a board
 
 ## Primary references
 
