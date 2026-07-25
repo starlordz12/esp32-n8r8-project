@@ -22,6 +22,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  host-tests:
+    name: Host protocol tests
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: host
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile host tools
+        run: python -m compileall -q host/csi_lab
+
+      - name: Run unit tests
+        run: python -m unittest discover -s host/tests -v
+
   build:
     name: Build firmware
     runs-on: ubuntu-latest
@@ -88,3 +108,4 @@ jobs:
           echo "::notice::No platformio.ini or CMakeLists.txt found - nothing to build yet."
           echo "The board model has not been provided, so no firmware target exists."
           echo "See docs/PROJECT_GUIDE.md sections 3 and 4."
+
