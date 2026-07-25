@@ -1,31 +1,39 @@
 # esp32-n8r8-project
 
-Firmware project for an ESP32 N8R8-class module (8 MB flash / 8 MB PSRAM class part).
+Wi-Fi CSI sensing project targeting YEJMKJ ESP32-S3-DevKitC-1-N8R8-compatible
+nodes and a Raspberry Pi 5 aggregation base station.
 
-> **Status: scaffold only.** No board model has been committed to yet, so this
-> repository deliberately contains no pinout, no USB configuration, no flash layout,
-> and no PSRAM settings. Those are filled in by the repository owner.
+> **Status:** software foundations and deployment documentation are in progress.
+> Real sensing and through-wall results require physical hardware validation and
+> labeled experiments.
 
 ## Start here
 
-All shared documentation lives in **[docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)**:
+- **[Project guide](docs/PROJECT_GUIDE.md)** — shared build, hardware, testing,
+  and collaboration rules
+- **[Raspberry Pi 5 base-station setup](docs/PI_BASE_STATION.md)** — complete
+  headless OS, NVMe, Docker, RuView, networking, and verification procedure
 
-- Build instructions
-- Project rules (branching, commits, what must never be committed)
-- Hardware notes
-- Testing steps
+`CLAUDE.md` and `AGENTS.md` are thin pointers to the project guide so every
+contributor—human or agent—works from the same source.
 
-`CLAUDE.md` and `AGENTS.md` are thin pointers to that guide so every contributor —
-human or agent — works from the same source.
+## Deployment files
+
+The production-oriented Raspberry Pi Compose configuration is under
+[`deploy/pi`](deploy/pi). It receives ESP32 CSI on UDP `5005` and serves the
+local RuView dashboard on TCP `3000`.
 
 ## Branches
 
-| Branch     | Purpose                                    |
-| ---------- | ------------------------------------------ |
-| `main`     | Stable. No direct development.             |
-| `claude/*` | Claude's working branches.                 |
-| `codex/*`  | Reserved for Codex.                        |
+| Branch | Purpose |
+| --- | --- |
+| `main` | Stable. No direct development. |
+| `claude/*` | Claude's working branches. |
+| `codex/*` | Codex working branches. |
 
 ## CI
 
-`.github/workflows/build.yml` is build-only. No flashing, no hardware tests.
+`.github/workflows/build.yml` is build-only. It never flashes devices or runs
+hardware-in-the-loop steps.
+
+
