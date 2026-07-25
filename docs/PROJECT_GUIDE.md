@@ -7,11 +7,14 @@ here — update this file, not the agent files, when the rules change.
 
 ## 1. Status
 
-The project is scaffolded but **not yet configured for a specific board**.
+The project targets a **YEJMKJ ESP32-S3-DevKitC-1-N8R8-compatible board** from
+Amazon listing [B0D93D26HW](https://www.amazon.com/dp/B0D93D26HW). The listing
+identifies an ESP32-S3-WROOM-1-N8R8 module, dual USB-C ports, 8 MB flash, and
+8 MB PSRAM.
 
-Nothing in this repo assumes a chip variant, pinout, USB mode, flash layout, or
-PSRAM configuration. Those values are supplied by the repository owner and are
-recorded in [Section 4](#4-hardware) once known.
+The memory configuration and core pin reservations are documented by Espressif.
+Because this is a third-party DevKitC-compatible board, the PCB revision and RGB
+LED pin must still be confirmed from the physical boards when they arrive.
 
 ---
 
@@ -70,33 +73,26 @@ comes first — assume anything pushed is compromised.
 
 ### Toolchain
 
-**Not yet selected.** The two candidates are PlatformIO and ESP-IDF; the choice
-depends on the board and is made by the owner. The CI workflow already handles
-either — see Section 5.
+RuView's reference CSI firmware uses ESP-IDF, so this project will use the same
+toolchain for firmware compatibility.
 
-Once chosen, record here:
-
-- Toolchain and version: _TBD_
-- Framework (Arduino / ESP-IDF): _TBD_
-- Board identifier / target: _TBD_
+- Toolchain and version: ESP-IDF v5.2 initially (matching the upstream reference build)
+- Framework: ESP-IDF
+- Target: `esp32s3`
+- Board class: ESP32-S3-DevKitC-1-N8R8-compatible
 
 ### Local build
 
-Placeholder — fill in when the toolchain lands.
-
-**If PlatformIO:**
+Once the firmware project files land:
 
 ```bash
-pip install -U platformio
-pio run
-```
-
-**If ESP-IDF:**
-
-```bash
-idf.py set-target <target>   # target comes from Section 4, do not guess
+idf.py set-target esp32s3
 idf.py build
 ```
+
+On Windows, prefer the pinned Espressif Docker image so the local SDK and shell
+environment cannot silently change the build. Firmware flashing remains a manual,
+owner-run step and is never performed by CI.
 
 ### Local-only configuration
 
@@ -108,32 +104,48 @@ the tracked build config.
 
 ## 4. Hardware
 
-> **Awaiting exact board model from the repository owner.**
-> Every field below is intentionally blank. Do not infer values from the repository
-> name, from a datasheet for a similar module, or from a previous project.
+The seller listing identifies a YEJMKJ five-pack of DevKitC-compatible boards.
+Espressif's official N8R8 configuration is the authority for memory settings;
+seller claims about the clone PCB are confirmed during physical bring-up.
 
 | Item                  | Value |
 | --------------------- | ----- |
-| Board model           | _TBD_ |
-| Chip / variant        | _TBD_ |
-| Flash size            | _TBD_ |
-| PSRAM size and mode   | _TBD_ |
-| USB configuration     | _TBD_ |
-| Bootloader / DFU mode | _TBD_ |
-| Partition table       | _TBD_ |
-| Power input           | _TBD_ |
+| Board model           | YEJMKJ ESP32-S3-DevKitC-1-N8R8-compatible, Amazon ASIN B0D93D26HW |
+| Chip / variant        | ESP32-S3-WROOM-1-N8R8; dual-core Xtensa LX7, target `esp32s3` |
+| Flash size            | 8 MB, Quad SPI |
+| PSRAM size and mode   | 8 MB, Octal SPI (OPI) |
+| USB configuration     | Dual USB-C: USB-to-UART plus native ESP32-S3 USB OTG/Serial-JTAG |
+| Bootloader / DFU mode | ROM serial download; hold BOOT (GPIO0) and tap RESET if automatic entry fails; do not assume USB DFU |
+| Partition table       | Planned RuView-compatible 8 MB OTA layout: bootloader `0x0`, table `0x8000`, OTA data `0xf000`, app/OTA0 `0x20000` |
+| Power input           | USB-C, 5 V + GND pins, or 3.3 V + GND pins; treat the methods as mutually exclusive |
 
 ### Pin map
 
-_TBD — no pin assignments until the board is confirmed._
+CSI capture uses the integrated Wi-Fi radio and requires no external signal pin.
+The following reservations prevent accidental conflicts during expansion.
 
 | Function | Pin | Notes |
 | -------- | --- | ----- |
-|          |     |       |
+| Boot strap/button | GPIO0 | Avoid forcing low except when entering the ROM downloader |
+| Native USB D- | GPIO19 | Reserved when native USB is used |
+| Native USB D+ | GPIO20 | Reserved when native USB is used |
+| UART0 TX | GPIO43 | USB-to-UART console path |
+| UART0 RX | GPIO44 | USB-to-UART console path |
+| Flash/PSRAM internal bus | GPIO35-37 | Not available externally on this N8R8 memory configuration |
+| Addressable RGB LED | GPIO38 or GPIO48 | Espressif v1.1 uses GPIO38; initial revision uses GPIO48; verify clone on arrival |
 
 ### Peripherals
 
-_TBD_
+- Integrated 2.4 GHz Wi-Fi and Bluetooth LE radio.
+- USB-to-UART bridge and native ESP32-S3 USB interface.
+- BOOT and RESET buttons.
+- Addressable RGB status LED; exact GPIO is a physical bring-up check.
+
+### Sources
+
+- Seller: [Amazon ASIN B0D93D26HW](https://www.amazon.com/dp/B0D93D26HW)
+- [Espressif ESP32-S3-DevKitC-1 hardware guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html)
+- [RuView ESP32 CSI firmware guide](https://github.com/ruvnet/RuView/tree/main/firmware/esp32-csi-node)
 
 ---
 
