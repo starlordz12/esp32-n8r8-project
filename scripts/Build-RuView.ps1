@@ -31,7 +31,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $buildRoot = Join-Path $firmwareRoot 'build'
-$applicationImages = @(Get-ChildItem -Path $buildRoot -Filter '*.bin' -File)
+$applicationImages = @(
+    Get-ChildItem -Path $buildRoot -Filter '*.bin' -File |
+        Where-Object Name -ne 'ota_data_initial.bin'
+)
 if ($applicationImages.Count -ne 1) {
     throw "Expected exactly one application image in $buildRoot; found $($applicationImages.Count)."
 }
