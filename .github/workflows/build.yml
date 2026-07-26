@@ -33,13 +33,29 @@ jobs:
       - name: Detect toolchain
         id: detect
         run: |
-          if [ -f platformio.ini ]; then
+          if [ -f ruview.lock.json ]; then
+            echo "toolchain=ruview" >> "$GITHUB_OUTPUT"
+          elif [ -f platformio.ini ]; then
             echo "toolchain=platformio" >> "$GITHUB_OUTPUT"
           elif [ -f CMakeLists.txt ]; then
             echo "toolchain=esp-idf" >> "$GITHUB_OUTPUT"
           else
             echo "toolchain=none" >> "$GITHUB_OUTPUT"
           fi
+
+      # --- Pinned RuView firmware ------------------------------------------
+      - name: Build pinned RuView firmware
+        if: steps.detect.outputs.toolchain == 'ruview'
+        shell: pwsh
+        run: ./scripts/Build-RuView.ps1
+
+      - name: Upload RuView firmware artifacts
+        if: steps.detect.outputs.toolchain == 'ruview'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruview-esp32s3-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
 
       # --- PlatformIO -------------------------------------------------------
       - name: Set up Python
@@ -86,5 +102,5 @@ jobs:
         if: steps.detect.outputs.toolchain == 'none'
         run: |
           echo "::notice::No platformio.ini or CMakeLists.txt found - nothing to build yet."
-          echo "Hardware is confirmed; the pinned RuView firmware target has not been imported yet."
+          echo "Hardware is confirmed; no pinned RuView firmware lock is present."
           echo "See docs/PROJECT_GUIDE.md sections 3 through 5."

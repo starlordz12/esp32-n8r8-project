@@ -15,9 +15,11 @@ The target hardware and software stack are confirmed:
 - RuView ESP32 CSI node firmware
 - ESP-IDF v5.4, built with RuView's display-less DevKitC configuration overlay
 
-The repository is still a scaffold: RuView firmware source has not been imported
-and there is no tracked `CMakeLists.txt` yet. The next implementation change must
-pin an upstream RuView release or commit rather than building from a moving branch.
+The build integration pins RuView commit
+`f783df234eec22929b88e256422cbfc50579196b` in `ruview.lock.json`. The
+`scripts/Sync-RuView.ps1` helper sparsely fetches only the firmware subtree into
+the ignored `.deps/` directory, so builds are reproducible without copying
+upstream source into this repository.
 
 A byte-for-byte factory flash backup was captured and verified locally before any
 firmware changes. It is a recovery artifact and must remain outside Git.
@@ -94,16 +96,15 @@ custom OTA partition table.
 
 ### Local build
 
-The following is the planned build command after the RuView firmware source is
-imported and pinned:
+Install and start Docker Desktop, then run:
 
 ```powershell
-docker run --rm `
-  -v "${PWD}/firmware/esp32-csi-node:/project" `
-  -w /project `
-  espressif/idf:v5.4 `
-  bash -c "rm -rf build sdkconfig && idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.defaults.devkitc' set-target esp32s3 && idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.defaults.devkitc' build"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-RuView.ps1
 ```
+
+The script verifies the lock, fetches the exact upstream commit, performs a clean
+Docker build, checks the required flash outputs, and creates SHA-256 checksums
+under the ignored `artifacts/` directory.
 
 The display-less overlay is required. Current RuView firmware can falsely detect a
 display on DevKitC-style boards without it, preventing the required CSI capture
@@ -125,7 +126,7 @@ placed in `sdkconfig.defaults`, source files, captured logs, or Git.
 
 ### Deployment sequence
 
-1. Import and pin the RuView firmware source.
+1. Synchronize the pinned RuView firmware source.
 2. Build the ESP32-S3 firmware with ESP-IDF v5.4 and the display-less DevKitC
    overlay.
 3. Prepare a Raspberry Pi 5 as the RuView aggregator, preferably connected to the
@@ -158,9 +159,8 @@ esptool probe independently verified the chip and memory configuration.
 
 ### RuView flash layout
 
-These values match the current upstream 8 MB RuView partition table and flashing
-instructions. Re-verify them against the pinned upstream revision when firmware is
-imported.
+These values match the partition table and flashing instructions at the RuView
+commit pinned in `ruview.lock.json`.
 
 | Artifact / partition | Offset     | Size |
 | -------------------- | ---------- | ---- |
@@ -210,15 +210,17 @@ hardware that can force their boot-time levels without a deliberate design revie
 `.github/workflows/build.yml` runs on pushes and PRs to `main`, `claude/*`, and
 `codex/*`. It is **build-only**:
 
+- Builds the exact RuView commit from `ruview.lock.json` in
+  `espressif/idf:v5.4` and uploads the generated package.
 - Detects the toolchain from files present in the repo.
 - Builds with PlatformIO if `platformio.ini` exists.
 - Builds with ESP-IDF if `CMakeLists.txt` exists **and** the `IDF_VERSION`
   repository variable is set (the version is a deliberate manual choice, not a guess).
 - If neither is present, the job reports "no firmware target configured" and passes.
 
-When the RuView firmware target is imported, set the `IDF_VERSION` repository
-variable to `v5.4` and ensure CI uses the same display-less DevKitC defaults as the
-local Docker build.
+The pinned RuView path does not use the `IDF_VERSION` repository variable; its
+container image and display-less DevKitC defaults are declared in the lock and
+used by the same script locally and in CI.
 
 No flashing. No serial. No hardware-in-the-loop. Those are added only on the
 owner's explicit instruction.
