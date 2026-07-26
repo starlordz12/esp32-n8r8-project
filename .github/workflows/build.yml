@@ -86,5 +86,5 @@ jobs:
         if: steps.detect.outputs.toolchain == 'none'
         run: |
           echo "::notice::No platformio.ini or CMakeLists.txt found - nothing to build yet."
-          echo "The board model has not been provided, so no firmware target exists."
-          echo "See docs/PROJECT_GUIDE.md sections 3 and 4."
+          echo "Hardware is confirmed; the pinned RuView firmware target has not been imported yet."
+          echo "See docs/PROJECT_GUIDE.md sections 3 through 5."

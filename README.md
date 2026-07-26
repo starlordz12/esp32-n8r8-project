@@ -1,10 +1,11 @@
 # esp32-n8r8-project
 
-Firmware project for an ESP32 N8R8-class module (8 MB flash / 8 MB PSRAM class part).
+Firmware and deployment workspace for
+[RuView](https://github.com/ruvnet/RuView) ESP32-S3 CSI sensor nodes.
 
-> **Status: scaffold only.** No board model has been committed to yet, so this
-> repository deliberately contains no pinout, no USB configuration, no flash layout,
-> and no PSRAM settings. Those are filled in by the repository owner.
+> **Status:** Hardware is confirmed as a YD-ESP32-S3 N8R8 development board
+> (ESP32-S3-DevKitC-1 compatible). The RuView firmware integration is planned but
+> has not yet been imported, so there is not a tracked firmware target to build.
 
 ## Start here
 
@@ -12,7 +13,8 @@ All shared documentation lives in **[docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.m
 
 - Build instructions
 - Project rules (branching, commits, what must never be committed)
-- Hardware notes
+- Confirmed hardware and pin constraints
+- RuView build and Raspberry Pi deployment plan
 - Testing steps
 
 `CLAUDE.md` and `AGENTS.md` are thin pointers to that guide so every contributor —

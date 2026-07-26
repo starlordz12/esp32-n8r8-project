@@ -7,11 +7,20 @@ here — update this file, not the agent files, when the rules change.
 
 ## 1. Status
 
-The project is scaffolded but **not yet configured for a specific board**.
+The target hardware and software stack are confirmed:
 
-Nothing in this repo assumes a chip variant, pinout, USB mode, flash layout, or
-PSRAM configuration. Those values are supplied by the repository owner and are
-recorded in [Section 4](#4-hardware) once known.
+- YD-ESP32-S3 Core Board, N8R8 variant
+- ESP32-S3-DevKitC-1-compatible, display-less carrier
+- ESP32-S3 with 8 MB flash and 8 MB octal PSRAM
+- RuView ESP32 CSI node firmware
+- ESP-IDF v5.4, built with RuView's display-less DevKitC configuration overlay
+
+The repository is still a scaffold: RuView firmware source has not been imported
+and there is no tracked `CMakeLists.txt` yet. The next implementation change must
+pin an upstream RuView release or commit rather than building from a moving branch.
+
+A byte-for-byte factory flash backup was captured and verified locally before any
+firmware changes. It is a recovery artifact and must remain outside Git.
 
 ---
 
@@ -45,8 +54,9 @@ recorded in [Section 4](#4-hardware) once known.
 Enforced by `.gitignore`, but the rule is the rule regardless of tooling:
 
 - Credentials, API keys, tokens, certificates, private keys.
-- Wi-Fi SSIDs and passwords. Use `secrets.h` / `credentials.h` (both ignored) and
-  commit a `*.example` template with placeholder values instead.
+- Wi-Fi SSIDs and passwords. For RuView, provision them directly into NVS. If
+  future source needs a local credentials file, keep it ignored and commit only a
+  `*.example` template with placeholder values.
 - Serial port names (`COM7`, `/dev/ttyUSB0`, `/dev/cu.usbmodem*`). These are
   per-machine — keep them in ignored local config, never in tracked source or docs.
 - Generated build output: `.pio/`, `build/`, `sdkconfig`, `sdkconfig.old`,
@@ -70,33 +80,38 @@ comes first — assume anything pushed is compromised.
 
 ### Toolchain
 
-**Not yet selected.** The two candidates are PlatformIO and ESP-IDF; the choice
-depends on the board and is made by the owner. The CI workflow already handles
-either — see Section 5.
+- Toolchain and framework: ESP-IDF v5.4
+- Target: `esp32s3`
+- Upstream firmware: `ruvnet/RuView`, `firmware/esp32-csi-node`
+- Board configuration: `sdkconfig.defaults` plus
+  `sdkconfig.defaults.devkitc`
+- Host build method on Windows: Docker using `espressif/idf:v5.4`
+- Flash/provision tooling: Python 3.10+ and esptool 5.x
 
-Once chosen, record here:
-
-- Toolchain and version: _TBD_
-- Framework (Arduino / ESP-IDF): _TBD_
-- Board identifier / target: _TBD_
+Do not substitute the Arduino framework or PlatformIO defaults. RuView uses native
+ESP-IDF features including Wi-Fi CSI, NVS provisioning, PSRAM, Kconfig, and its
+custom OTA partition table.
 
 ### Local build
 
-Placeholder — fill in when the toolchain lands.
+The following is the planned build command after the RuView firmware source is
+imported and pinned:
 
-**If PlatformIO:**
-
-```bash
-pip install -U platformio
-pio run
+```powershell
+docker run --rm `
+  -v "${PWD}/firmware/esp32-csi-node:/project" `
+  -w /project `
+  espressif/idf:v5.4 `
+  bash -c "rm -rf build sdkconfig && idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.defaults.devkitc' set-target esp32s3 && idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.defaults.devkitc' build"
 ```
 
-**If ESP-IDF:**
+The display-less overlay is required. Current RuView firmware can falsely detect a
+display on DevKitC-style boards without it, preventing the required CSI capture
+mode and producing zero packets.
 
-```bash
-idf.py set-target <target>   # target comes from Section 4, do not guess
-idf.py build
-```
+The expected flash inputs are the RuView bootloader, partition table, initial OTA
+data, and application image. Flash offsets are recorded in Section 4. Never commit
+these generated binaries.
 
 ### Local-only configuration
 
@@ -104,36 +119,87 @@ Anything machine-specific (serial port, upload speed, monitor settings) goes in 
 untracked local file — `platformio_local.ini`, `.env`, or an IDE setting — never in
 the tracked build config.
 
+Wi-Fi credentials, the Raspberry Pi aggregator address, mesh keys, and per-board
+node IDs must be written with RuView's `provision.py` into NVS. They must not be
+placed in `sdkconfig.defaults`, source files, captured logs, or Git.
+
+### Deployment sequence
+
+1. Import and pin the RuView firmware source.
+2. Build the ESP32-S3 firmware with ESP-IDF v5.4 and the display-less DevKitC
+   overlay.
+3. Prepare a Raspberry Pi 5 as the RuView aggregator, preferably connected to the
+   router by Ethernet with a reserved IP address.
+4. Flash one ESP32-S3 through its CH343P USB-to-UART port.
+5. Provision Wi-Fi, the Pi aggregator IP, and a unique node ID into NVS.
+6. Monitor the node at 115200 baud and verify CSI traffic reaches UDP port 5005 on
+   the Pi.
+7. Repeat for the remaining boards with unique node IDs.
+8. Position and calibrate the nodes only after the first end-to-end path is stable.
+
 ---
 
 ## 4. Hardware
 
-> **Awaiting exact board model from the repository owner.**
-> Every field below is intentionally blank. Do not infer values from the repository
-> name, from a datasheet for a similar module, or from a previous project.
+The owner confirmed the board from physical inspection and photos. A read-only
+esptool probe independently verified the chip and memory configuration.
 
-| Item                  | Value |
-| --------------------- | ----- |
-| Board model           | _TBD_ |
-| Chip / variant        | _TBD_ |
-| Flash size            | _TBD_ |
-| PSRAM size and mode   | _TBD_ |
-| USB configuration     | _TBD_ |
-| Bootloader / DFU mode | _TBD_ |
-| Partition table       | _TBD_ |
-| Power input           | _TBD_ |
+| Item                   | Value |
+| ---------------------- | ----- |
+| Board model            | YD-ESP32-S3 Core Board, N8R8; ESP32-S3-DevKitC-1 compatible |
+| Chip / variant         | ESP32-S3 QFN56, dual-core 240 MHz, revision v0.2 |
+| Flash                  | 8 MB, 3.3 V, quad-capable; RuView uses DIO at 80 MHz |
+| PSRAM                  | 8 MB octal PSRAM, 3.3 V |
+| USB-to-UART            | USB-C connector labeled `COM`, through WCH CH343P; primary flash and serial connection |
+| Native USB             | USB-C connector labeled `USB`, direct to GPIO19 (D-) and GPIO20 (D+); USB OTG/JTAG |
+| Bootloader mode        | Automatic UART download; manual fallback is hold BOOT and press RST |
+| RuView partition table | Upstream 8 MB OTA layout in `partitions_display.csv` |
+| Development power      | Use one USB-C port; do not combine USB and header power without reviewing jumper state |
+
+### RuView flash layout
+
+These values match the current upstream 8 MB RuView partition table and flashing
+instructions. Re-verify them against the pinned upstream revision when firmware is
+imported.
+
+| Artifact / partition | Offset     | Size |
+| -------------------- | ---------- | ---- |
+| Bootloader           | `0x000000` | Generated by ESP-IDF |
+| Partition table      | `0x008000` | Generated by ESP-IDF |
+| NVS                  | `0x009000` | `0x006000` |
+| Initial OTA data     | `0x00F000` | `0x002000` |
+| PHY init             | `0x011000` | `0x001000` |
+| OTA application 0    | `0x020000` | `0x200000` |
+| OTA application 1    | `0x220000` | `0x200000` |
+| SPIFFS               | `0x420000` | `0x1E0000` |
 
 ### Pin map
 
-_TBD — no pin assignments until the board is confirmed._
+| Function           | Pin(s)          | Notes |
+| ------------------ | --------------- | ----- |
+| BOOT button        | GPIO0           | Hold during reset for ROM download mode |
+| UART0 TX / RX      | GPIO43 / GPIO44 | Connected to CH343P; TX/RX LEDs share these signals |
+| Native USB D- / D+ | GPIO19 / GPIO20 | Reserved when native USB is enabled |
+| Onboard WS2812 RGB | GPIO48          | Routed through the board's `RGB` solder jumper |
+| Internal PSRAM bus | GPIO35/36/37    | Do not use externally on this N8R8 board |
 
-| Function | Pin | Notes |
-| -------- | --- | ----- |
-|          |     |       |
+GPIO0, GPIO3, GPIO45, and GPIO46 are strapping pins. Do not assign external
+hardware that can force their boot-time levels without a deliberate design review.
 
 ### Peripherals
 
-_TBD_
+- WCH CH343P USB-to-UART bridge
+- WS2812 addressable RGB LED
+- Power, UART TX, and UART RX status LEDs
+- RST and BOOT buttons
+- Two USB-C connectors: USB-to-UART and native USB OTG/JTAG
+
+### References
+
+- [RuView ESP32 CSI node](https://github.com/ruvnet/RuView/tree/main/firmware/esp32-csi-node)
+- [RuView display-less DevKitC overlay](https://github.com/ruvnet/RuView/blob/main/firmware/esp32-csi-node/sdkconfig.defaults.devkitc)
+- [YD-ESP32-S3 hardware documentation](https://github.com/vcc-gnd/YD-ESP32-S3)
+- [Espressif ESP32-S3-DevKitC-1 guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html)
 
 ---
 
@@ -150,6 +216,10 @@ _TBD_
   repository variable is set (the version is a deliberate manual choice, not a guess).
 - If neither is present, the job reports "no firmware target configured" and passes.
 
+When the RuView firmware target is imported, set the `IDF_VERSION` repository
+variable to `v5.4` and ensure CI uses the same display-less DevKitC defaults as the
+local Docker build.
+
 No flashing. No serial. No hardware-in-the-loop. Those are added only on the
 owner's explicit instruction.
 
@@ -161,5 +231,13 @@ owner's explicit instruction.
 
 ### Hardware testing
 
-Manual, off-CI, and owner-run for now. Procedure to be written once the board is
-known and a first firmware image exists.
+Manual, off-CI, and owner-run:
+
+1. Build and flash one node before touching the remaining boards.
+2. Confirm the boot log identifies the configured node ID and successful Wi-Fi
+   connection.
+3. Confirm CSI streaming is active and the Pi receives UDP packets on port 5005.
+4. Run a short stability soak before cloning the process to additional nodes.
+5. Give every additional node a unique ID and verify it independently.
+
+Flashing, serial monitoring, and hardware-in-the-loop checks must remain outside CI.
