@@ -88,3 +88,31 @@ jobs:
           echo "::notice::No platformio.ini or CMakeLists.txt found - nothing to build yet."
           echo "Hardware is confirmed; the pinned RuView firmware target has not been imported yet."
           echo "See docs/PROJECT_GUIDE.md sections 3 through 5."
+
+  dashboard:
+    name: Build portable demo dashboard
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: demo/dashboard
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: demo/dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        run: npm ci
+
+      - name: Build dashboard
+        run: npm run build
+
+      - name: Test server-rendered dashboard
+        run: node --test tests/rendered-html.test.mjs
