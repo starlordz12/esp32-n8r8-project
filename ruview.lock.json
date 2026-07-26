@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/ruvnet/RuView.git",
+  "commit": "f783df234eec22929b88e256422cbfc50579196b",
+  "firmwarePath": "firmware/esp32-csi-node",
+  "idfImage": "espressif/idf:v5.4",
+  "sdkconfigDefaults": [
+    "sdkconfig.defaults",
+    "sdkconfig.defaults.devkitc"
+  ]
+}
