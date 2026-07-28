@@ -5,8 +5,7 @@ import { useMemo, useState } from "react";
 type DashboardView = "demo" | "maintenance";
 
 const nodes = [
-  { id: "node-01", label: "Window side", signal: "Excellent", packets: "42/s" },
-  { id: "node-02", label: "Door side", signal: "Good", packets: "38/s" },
+  { id: "node-01", label: "Desktop test node", signal: "Preview", packets: "42/s" },
 ];
 
 const guideSteps = [
@@ -112,13 +111,13 @@ export default function Home() {
               </span>
               <span>
                 <small>System status</small>
-                <strong>Demo ready</strong>
+                <strong>One-node preview</strong>
               </span>
             </div>
             <div className="ready-stats">
               <span>
-                <strong>2 of 2</strong>
-                nodes online
+                <strong>1 of 1</strong>
+                node in preview
               </span>
               <span>
                 <strong>Local only</strong>
@@ -151,13 +150,6 @@ export default function Home() {
                   <span className="sensor-wave sensor-wave-two" />
                   <strong>01</strong>
                 </div>
-                <div className="sensor sensor-two">
-                  <span className="sensor-core" />
-                  <span className="sensor-wave sensor-wave-one" />
-                  <span className="sensor-wave sensor-wave-two" />
-                  <strong>02</strong>
-                </div>
-
                 <div className={`activity-zone activity-zone-${scene.marker}`}>
                   <span className="activity-halo" />
                   <span className="person-marker" aria-hidden="true">
@@ -230,14 +222,14 @@ export default function Home() {
               <li>
                 <span>1</span>
                 <p>
-                  <strong>Nodes listen</strong>
+                  <strong>One node listens</strong>
                   to ordinary Wi-Fi reflections
                 </p>
               </li>
               <li>
                 <span>2</span>
                 <p>
-                  <strong>The Pi compares</strong>
+                  <strong>The desktop compares</strong>
                   tiny signal changes
                 </p>
               </li>
@@ -266,7 +258,7 @@ export default function Home() {
               type="button"
               onClick={() => setChecksComplete(true)}
             >
-              {checksComplete ? "Checks passed" : "Run readiness check"}
+              {checksComplete ? "Preview checks passed" : "Run readiness check"}
             </button>
           </div>
 
@@ -277,17 +269,19 @@ export default function Home() {
               </span>
               <div>
                 <p className="eyebrow">Overall status</p>
-                <h2>{checksComplete ? "Ready to demonstrate" : "Preview is healthy"}</h2>
-                <p>All visible checks are clear. Live hardware wiring comes next.</p>
+                <h2>
+                  {checksComplete ? "Preview ready to review" : "Preview is healthy"}
+                </h2>
+                <p>All preview checks are clear. The live node connection comes next.</p>
               </div>
             </article>
 
             <article className="health-card data-source-card">
               <p className="eyebrow">Data source</p>
-              <h2>Preview adapter</h2>
+              <h2>Desktop preview adapter</h2>
               <p>
                 The interface is running on realistic sample readings while the
-                Raspberry Pi service adapter is scaffolded.
+                desktop RuView connection is prepared.
               </p>
               <span className="adapter-status">RuView connection pending</span>
             </article>
@@ -295,10 +289,10 @@ export default function Home() {
             <article className="nodes-card">
               <div className="section-heading">
                 <div>
-                  <p className="eyebrow">Sensor nodes</p>
-                  <h2>2 nodes expected</h2>
+                  <p className="eyebrow">Sensor node</p>
+                  <h2>1 node expected</h2>
                 </div>
-                <span className="online-label">All online in preview</span>
+                <span className="online-label">One node online in preview</span>
               </div>
               <div className="node-table">
                 {nodes.map((node) => (
@@ -316,24 +310,24 @@ export default function Home() {
                       <strong>{node.packets}</strong>
                       <small>sample rate</small>
                     </span>
-                    <span className="node-state">Online</span>
+                    <span className="node-state">Preview</span>
                   </div>
                 ))}
               </div>
             </article>
 
             <article className="checklist-card">
-              <p className="eyebrow">Portable kit checklist</p>
-              <h2>Pack, place, power, present.</h2>
+              <p className="eyebrow">First-node checklist</p>
+              <h2>Connect, flash, stream, verify.</h2>
               <ul>
-                <li>
-                  <span>✓</span> Pi and travel router powered
+                <li className="pending">
+                  <span>•</span> Desktop sensing service started
                 </li>
-                <li>
-                  <span>✓</span> Tablet joined to the private demo network
+                <li className="pending">
+                  <span>•</span> Node joined to the test Wi-Fi network
                 </li>
-                <li>
-                  <span>✓</span> Sensor stands placed from the layout card
+                <li className="pending">
+                  <span>•</span> Node sending CSI to this desktop
                 </li>
                 <li className="pending">
                   <span>•</span> Live node discovery will appear here
