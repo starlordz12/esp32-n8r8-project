@@ -1,0 +1,5 @@
+# Copy this file to .dev.vars for local development. Never commit the copy.
+RUVIEW_BASE_URL=http://127.0.0.1:3000
+
+# Optional when RuView API authentication is enabled. Keep the real token local.
+RUVIEW_API_TOKEN=

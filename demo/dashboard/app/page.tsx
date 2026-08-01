@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useDashboardSnapshot } from "@/lib/use-dashboard-snapshot";
 
 type DashboardView = "demo" | "maintenance";
 
-const nodes = [
+const previewNodes = [
   { id: "node-01", label: "Desktop test node", signal: "Preview", packets: "42/s" },
 ];
 
@@ -33,8 +34,75 @@ export default function Home() {
   const [view, setView] = useState<DashboardView>("demo");
   const [guidedStep, setGuidedStep] = useState<number | null>(null);
   const [checksComplete, setChecksComplete] = useState(false);
+  const { snapshot, endpointAvailable: adapterEndpointAvailable } =
+    useDashboardSnapshot();
+
+  const isLive =
+    adapterEndpointAvailable &&
+    snapshot?.mode === "live" &&
+    snapshot.connection === "connected";
+  const hasConfiguredAdapter = snapshot?.connection !== "unconfigured" && snapshot !== null;
+  const serviceConnected =
+    snapshot?.connection === "connected" ||
+    snapshot?.connection === "simulated" ||
+    snapshot?.connection === "waiting" ||
+    snapshot?.connection === "offline";
+
+  const statusLabel = isLive
+    ? "Live ESP32 data"
+    : snapshot?.connection === "simulated"
+      ? "Simulation data"
+      : hasConfiguredAdapter
+        ? "Live data unavailable"
+        : "Preview data";
+
+  const displayNodes = isLive
+    ? snapshot.nodes.map((node) => ({
+        ...node,
+        label: "Live RuView node",
+        signal: node.rssiDbm === null ? "Not reported" : `${Math.round(node.rssiDbm)} dBm`,
+        packets:
+          node.subcarrierCount === null ? "Not reported" : String(node.subcarrierCount),
+      }))
+    : hasConfiguredAdapter
+      ? []
+      : previewNodes;
 
   const scene = useMemo(() => {
+    if (isLive && snapshot) {
+      const { presence, confidencePercent, motion } = snapshot.reading;
+      if (presence === false) {
+        return {
+          title: "Room appears clear",
+          detail: "No current presence is reported by RuView",
+          confidence: confidencePercent,
+          marker: "center",
+          motion: motion ?? "Still",
+          visible: false,
+        };
+      }
+      return {
+        title: presence === true ? "Presence detected" : "Reading live signals",
+        detail:
+          presence === true
+            ? "Wi-Fi signal changes indicate someone is in the sensing area"
+            : "RuView has not reported a presence decision yet",
+        confidence: confidencePercent,
+        marker: "center",
+        motion: motion ?? "Activity detected",
+        visible: presence === true,
+      };
+    }
+    if (hasConfiguredAdapter && snapshot?.connection !== "simulated") {
+      return {
+        title: "Waiting for live data",
+        detail: snapshot?.message ?? "The local RuView service is not available yet",
+        confidence: null,
+        marker: "center",
+        motion: "No live reading",
+        visible: false,
+      };
+    }
     if (guidedStep === 1) {
       return {
         title: "Someone is standing still",
@@ -42,6 +110,7 @@ export default function Home() {
         confidence: 86,
         marker: "center",
         motion: "Low movement",
+        visible: true,
       };
     }
     if (guidedStep === 2) {
@@ -51,6 +120,7 @@ export default function Home() {
         confidence: 94,
         marker: "right",
         motion: "Active",
+        visible: true,
       };
     }
     return {
@@ -59,8 +129,9 @@ export default function Home() {
       confidence: 92,
       marker: "left",
       motion: "Active",
+      visible: true,
     };
-  }, [guidedStep]);
+  }, [guidedStep, hasConfiguredAdapter, isLive, snapshot]);
 
   function advanceGuide() {
     if (guidedStep === null) {
@@ -111,13 +182,19 @@ export default function Home() {
               </span>
               <span>
                 <small>System status</small>
-                <strong>One-node preview</strong>
+                <strong>
+                  {isLive
+                    ? `${snapshot.nodes.length} live ${snapshot.nodes.length === 1 ? "node" : "nodes"}`
+                    : hasConfiguredAdapter
+                      ? "Live connection pending"
+                      : "One-node preview"}
+                </strong>
               </span>
             </div>
             <div className="ready-stats">
               <span>
-                <strong>1 of 1</strong>
-                node in preview
+                <strong>{isLive ? snapshot.nodes.length : hasConfiguredAdapter ? 0 : "1 of 1"}</strong>
+                {isLive ? " nodes reporting" : hasConfiguredAdapter ? " live nodes" : " node in preview"}
               </span>
               <span>
                 <strong>Local only</strong>
@@ -137,7 +214,9 @@ export default function Home() {
                   <p className="eyebrow">Live room view</p>
                   <h1>Living room</h1>
                 </div>
-                <span className="preview-pill">Preview data</span>
+                <span className={`preview-pill ${isLive ? "live-pill" : ""}`}>
+                  {statusLabel}
+                </span>
               </div>
 
               <div className="room-map" aria-label={`Room activity: ${scene.detail}`}>
@@ -150,14 +229,16 @@ export default function Home() {
                   <span className="sensor-wave sensor-wave-two" />
                   <strong>01</strong>
                 </div>
-                <div className={`activity-zone activity-zone-${scene.marker}`}>
-                  <span className="activity-halo" />
-                  <span className="person-marker" aria-hidden="true">
-                    <span className="person-head" />
-                    <span className="person-body" />
-                  </span>
-                  <span className="activity-caption">{scene.motion}</span>
-                </div>
+                {scene.visible && (
+                  <div className={`activity-zone activity-zone-${scene.marker}`}>
+                    <span className="activity-halo" />
+                    <span className="person-marker" aria-hidden="true">
+                      <span className="person-head" />
+                      <span className="person-body" />
+                    </span>
+                    <span className="activity-caption">{scene.motion}</span>
+                  </div>
+                )}
 
                 <div className="room-scale">
                   <span />
@@ -173,7 +254,9 @@ export default function Home() {
                 <span>
                   <i className="legend-activity" /> Detected activity
                 </span>
-                <span className="last-update">Updated just now</span>
+                <span className="last-update">
+                  {isLive ? "Updated from local RuView" : "Preview state"}
+                </span>
               </div>
             </article>
 
@@ -186,15 +269,17 @@ export default function Home() {
                 <h2>{scene.title}</h2>
                 <p>{scene.detail}</p>
 
-                <div className="confidence">
-                  <div>
-                    <span>Signal confidence</span>
-                    <strong>{scene.confidence}%</strong>
+                {scene.confidence !== null && (
+                  <div className="confidence">
+                    <div>
+                      <span>Signal confidence</span>
+                      <strong>{scene.confidence}%</strong>
+                    </div>
+                    <div className="confidence-track">
+                      <span style={{ width: `${scene.confidence}%` }} />
+                    </div>
                   </div>
-                  <div className="confidence-track">
-                    <span style={{ width: `${scene.confidence}%` }} />
-                  </div>
-                </div>
+                )}
               </article>
 
               <article className="privacy-card">
@@ -229,7 +314,7 @@ export default function Home() {
               <li>
                 <span>2</span>
                 <p>
-                  <strong>The desktop compares</strong>
+                  <strong>{isLive ? "The Raspberry Pi compares" : "The desktop compares"}</strong>
                   tiny signal changes
                 </p>
               </li>
@@ -258,7 +343,11 @@ export default function Home() {
               type="button"
               onClick={() => setChecksComplete(true)}
             >
-              {checksComplete ? "Preview checks passed" : "Run readiness check"}
+              {checksComplete
+                ? isLive
+                  ? "Live checks passed"
+                  : "Preview checks passed"
+                : "Run readiness check"}
             </button>
           </div>
 
@@ -270,32 +359,58 @@ export default function Home() {
               <div>
                 <p className="eyebrow">Overall status</p>
                 <h2>
-                  {checksComplete ? "Preview ready to review" : "Preview is healthy"}
+                  {isLive
+                    ? "Live demo ready"
+                    : hasConfiguredAdapter
+                      ? "Live connection needs attention"
+                      : checksComplete
+                        ? "Preview ready to review"
+                        : "Preview is healthy"}
                 </h2>
-                <p>All preview checks are clear. The live node connection comes next.</p>
+                <p>
+                  {!adapterEndpointAvailable
+                    ? "The dashboard adapter endpoint is unavailable."
+                    : snapshot?.message ??
+                      "All preview checks are clear. The live node connection comes next."}
+                </p>
               </div>
             </article>
 
             <article className="health-card data-source-card">
               <p className="eyebrow">Data source</p>
-              <h2>Desktop preview adapter</h2>
+              <h2>{isLive ? "Raspberry Pi RuView adapter" : "Local preview adapter"}</h2>
               <p>
-                The interface is running on realistic sample readings while the
-                desktop RuView connection is prepared.
+                {isLive
+                  ? "The dashboard is reading a normalized snapshot from the local RuView sensing service."
+                  : "The interface stays clearly labeled until a complete ESP32 sensing update is available."}
               </p>
-              <span className="adapter-status">RuView connection pending</span>
+              <span className={`adapter-status ${isLive ? "adapter-live" : ""}`}>
+                {isLive
+                  ? "Live RuView connection"
+                  : snapshot?.connection === "simulated"
+                    ? "RuView simulation connected"
+                    : serviceConnected
+                      ? "Waiting for ESP32 data"
+                      : "RuView connection pending"}
+              </span>
             </article>
 
             <article className="nodes-card">
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">Sensor node</p>
-                  <h2>1 node expected</h2>
+                  <h2>
+                    {isLive
+                      ? `${displayNodes.length} live node${displayNodes.length === 1 ? "" : "s"}`
+                      : "1 node expected"}
+                  </h2>
                 </div>
-                <span className="online-label">One node online in preview</span>
+                <span className="online-label">
+                  {isLive ? `${displayNodes.length} reporting now` : "One node online in preview"}
+                </span>
               </div>
               <div className="node-table">
-                {nodes.map((node) => (
+                {displayNodes.map((node) => (
                   <div className="node-row" key={node.id}>
                     <span className="node-number">{node.id.slice(-2)}</span>
                     <span>
@@ -308,11 +423,14 @@ export default function Home() {
                     </span>
                     <span>
                       <strong>{node.packets}</strong>
-                      <small>sample rate</small>
+                      <small>{isLive ? "subcarriers" : "sample rate"}</small>
                     </span>
-                    <span className="node-state">Preview</span>
+                    <span className="node-state">{isLive ? "Live" : "Preview"}</span>
                   </div>
                 ))}
+                {displayNodes.length === 0 && (
+                  <p className="empty-node-state">No live ESP32 node is reporting yet.</p>
+                )}
               </div>
             </article>
 
@@ -320,17 +438,17 @@ export default function Home() {
               <p className="eyebrow">First-node checklist</p>
               <h2>Connect, flash, stream, verify.</h2>
               <ul>
-                <li className="pending">
-                  <span>•</span> Desktop sensing service started
+                <li className={serviceConnected ? "complete" : "pending"}>
+                  <span>{serviceConnected ? "✓" : "•"}</span> Raspberry Pi sensing service started
                 </li>
-                <li className="pending">
-                  <span>•</span> Node joined to the test Wi-Fi network
+                <li className={isLive ? "complete" : "pending"}>
+                  <span>{isLive ? "✓" : "•"}</span> Node joined to the demo Wi-Fi network
                 </li>
-                <li className="pending">
-                  <span>•</span> Node sending CSI to this desktop
+                <li className={isLive ? "complete" : "pending"}>
+                  <span>{isLive ? "✓" : "•"}</span> Node sending CSI to the Raspberry Pi
                 </li>
-                <li className="pending">
-                  <span>•</span> Live node discovery will appear here
+                <li className={isLive ? "complete" : "pending"}>
+                  <span>{isLive ? "✓" : "•"}</span> Dashboard receiving normalized live updates
                 </li>
               </ul>
             </article>
@@ -341,7 +459,7 @@ export default function Home() {
       <footer className="footer">
         <span>
           <span className="status-dot" aria-hidden="true" />
-          Portable demo preview
+          {isLive ? "Portable demo live" : "Portable demo preview"}
         </span>
         <span>Designed to work without cloud access</span>
       </footer>

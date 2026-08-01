@@ -150,8 +150,11 @@ operator readiness view and includes:
 - Node-health and setup checks for the person operating the kit.
 - Responsive layouts for a tablet, laptop, or kiosk display.
 
-The initial scaffold uses clearly labeled preview data. It must not imply a live
-hardware connection until the Raspberry Pi adapter is implemented and tested.
+The dashboard includes a read-only Raspberry Pi adapter that normalizes the
+pinned RuView server's `/health` and `/api/v1/sensing/latest` responses. It enters
+live mode only when RuView reports a complete, recent ESP32 update with at least
+one node. Missing configuration, simulation, no-data, stale/offline, invalid,
+timeout, and authorization failures remain explicitly non-live.
 Run it locally with Node.js 22.13 or later:
 
 ```powershell
@@ -159,6 +162,11 @@ cd demo\dashboard
 npm.cmd ci
 npm.cmd run dev
 ```
+
+For local adapter configuration, copy `.dev.vars.example` to the ignored
+`.dev.vars` file inside `demo/dashboard/`. Set the RuView server origin and the
+optional API token only in that local file. The token is consumed server-side and
+must never be returned to the browser, logs, source, or Git.
 
 Network names, credentials, Pi addresses, node identities, and room-specific
 placement remain outside Git. The dashboard must remain usable on the portable
