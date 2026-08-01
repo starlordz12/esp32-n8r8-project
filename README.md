@@ -4,8 +4,8 @@ Firmware and deployment workspace for
 [RuView](https://github.com/ruvnet/RuView) ESP32-S3 CSI sensor nodes.
 
 > **Status:** Hardware is confirmed as a YD-ESP32-S3 N8R8 development board
-> (ESP32-S3-DevKitC-1 compatible). The RuView firmware integration is planned but
-> has not yet been imported, so there is not a tracked firmware target to build.
+> (ESP32-S3-DevKitC-1 compatible). RuView is pinned by commit and builds with
+> ESP-IDF v5.4 using its display-less DevKitC configuration.
 
 ## Start here
 
@@ -19,6 +19,20 @@ All shared documentation lives in **[docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.m
 
 `CLAUDE.md` and `AGENTS.md` are thin pointers to that guide so every contributor —
 human or agent — works from the same source.
+
+## Build RuView
+
+Docker Desktop and Git are the only host dependencies. The scripts fetch only the
+pinned upstream firmware subtree; upstream source and generated binaries remain
+ignored by Git.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Sync-RuView.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-RuView.ps1
+```
+
+Successful builds are packaged under `artifacts/` with SHA-256 checksums. GitHub
+Actions runs the same build and publishes the package as a workflow artifact.
 
 ## Branches
 
