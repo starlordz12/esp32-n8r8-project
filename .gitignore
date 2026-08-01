@@ -23,6 +23,7 @@ wifi_credentials.h
 # ---------------------------------------------------------------------------
 .env
 .env.*
+!deploy/pi/.env.example
 *.local
 *.local.*
 platformio_local.ini

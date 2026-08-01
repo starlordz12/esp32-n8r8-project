@@ -63,3 +63,14 @@ npm.cmd run dev
 Copy `demo/dashboard/.dev.vars.example` to the ignored `.dev.vars` file to set
 the local RuView origin and, when enabled, its API token. Keep all real network
 values and credentials outside Git.
+
+## Raspberry Pi one-node deployment
+
+The local Pi stack pins the multi-architecture RuView server image by digest,
+builds a minimal unprivileged dashboard container, requires API authentication,
+and keeps the raw RuView HTTP/WebSocket interfaces on loopback by default. Start
+with the complete **[one-node bring-up runbook](docs/PI_ONE_NODE_BRINGUP.md)**.
+
+The firmware package now includes a machine-readable flash manifest. Use the
+validation, flash, and secure provisioning helpers only from the development
+machine; hardware operations remain manual and are never run in CI.

@@ -1,0 +1,56 @@
+name: ruview-portable
+
+services:
+  sensing-server:
+    image: docker.io/ruvnet/wifi-densepose@sha256:e2186cb9fbb8f52f4e341bc90bef86eba323afbafff134b1eaf498e83a2e5d58
+    environment:
+      CSI_SOURCE: esp32
+      MODELS_DIR: /app/data/models
+      RUST_LOG: ${RUVIEW_LOG_LEVEL:-info}
+      RUVIEW_API_TOKEN: ${RUVIEW_API_TOKEN:?Set RUVIEW_API_TOKEN in deploy/pi/.env}
+      RUVIEW_BIND_ADDR: 0.0.0.0
+    ports:
+      - "${RUVIEW_HTTP_BIND_ADDRESS:-127.0.0.1}:3000:3000/tcp"
+      - "${RUVIEW_WS_BIND_ADDRESS:-127.0.0.1}:3001:3001/tcp"
+      - "${RUVIEW_UDP_BIND_ADDRESS:-0.0.0.0}:5005:5005/udp"
+    volumes:
+      - ruview-data:/app/data
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  dashboard:
+    image: ruview-portable-dashboard:local
+    build:
+      context: ../../demo/dashboard
+      dockerfile: Dockerfile.pi
+    environment:
+      PORT: "3000"
+      RUVIEW_API_TOKEN: ${RUVIEW_API_TOKEN:?Set RUVIEW_API_TOKEN in deploy/pi/.env}
+      RUVIEW_BASE_URL: http://sensing-server:3000
+    depends_on:
+      - sensing-server
+    ports:
+      - "${DASHBOARD_BIND_ADDRESS:-0.0.0.0}:8080:3000/tcp"
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/ruvview/snapshot').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  ruview-data:
