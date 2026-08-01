@@ -30,13 +30,13 @@ interface ExecutionContext {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env | undefined, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/ruview/snapshot") {
       const snapshot = await fetchRuViewSnapshot({
-        baseUrl: env.RUVIEW_BASE_URL,
-        apiToken: env.RUVIEW_API_TOKEN,
+        baseUrl: env?.RUVIEW_BASE_URL ?? process.env.RUVIEW_BASE_URL,
+        apiToken: env?.RUVIEW_API_TOKEN ?? process.env.RUVIEW_API_TOKEN,
       });
       return Response.json(snapshot, {
         headers: {
@@ -47,6 +47,12 @@ const worker = {
     }
 
     if (url.pathname === "/_vinext/image") {
+      if (!env?.ASSETS || !env.IMAGES) {
+        return Response.json(
+          { error: "Image optimization is unavailable in this runtime." },
+          { status: 503 },
+        );
+      }
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),

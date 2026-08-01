@@ -130,5 +130,19 @@ jobs:
       - name: Validate dashboard
         run: npm test
 
+      - name: Smoke test standalone Pi dashboard
+        run: |
+          BUILD_STANDALONE=true npm run build
+          node --test tests/standalone-smoke.test.mjs
+
+      - name: Validate Raspberry Pi deployment
+        run: |
+          bash -n ../../deploy/pi/verify.sh
+          python -m py_compile ../../scripts/Invoke-RuViewProvision.py
+          docker compose \
+            --env-file ../../deploy/pi/.env.example \
+            -f ../../deploy/pi/compose.yaml \
+            config --quiet
+
       - name: Lint dashboard
         run: npm run lint

@@ -1,0 +1,10 @@
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.git
+.next
+dist
+node_modules
+npm-debug.log*
+wrangler.toml

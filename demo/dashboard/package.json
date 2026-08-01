@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run build && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/ruview-adapter.test.ts",
+    "test": "npm run typecheck && npm run build && node --experimental-strip-types --test tests/deployment-config.test.mjs tests/rendered-html.test.mjs tests/ruview-adapter.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
@@ -28,6 +28,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "js-yaml": "4.1.1",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
