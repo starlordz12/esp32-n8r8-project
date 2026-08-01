@@ -172,6 +172,20 @@ Network names, credentials, Pi addresses, node identities, and room-specific
 placement remain outside Git. The dashboard must remain usable on the portable
 router network without cloud or internet access.
 
+### Raspberry Pi one-node stack
+
+`deploy/pi/` contains the supported local deployment. The sensing server image
+is pinned by manifest digest, forced to the ESP32 input source, and protected by
+a required local API token. Its HTTP and WebSocket ports bind to loopback by
+default; only dashboard TCP 8080 and ESP32 ingest UDP 5005 are LAN-facing.
+
+Follow [PI_ONE_NODE_BRINGUP.md](PI_ONE_NODE_BRINGUP.md) from a clean Pi 5. Prove
+one node with `deploy/pi/verify.sh --expect-live` and complete a stability soak
+before adding another node. The server-image lock is separate from the firmware
+lock because upstream did not publish an image for the exact firmware commit;
+the recorded image commit was reviewed to confirm that no server or Docker files
+changed between those commits.
+
 ---
 
 ## 4. Hardware
@@ -246,11 +260,15 @@ hardware that can force their boot-time levels without a deliberate design revie
 
 - Builds the exact RuView commit from `ruview.lock.json` in
   `espressif/idf:v5.4` and uploads the generated package.
+- Validates the generated flash manifest, four reviewed offsets, and SHA-256
+  hashes before uploading the package.
 - Detects the toolchain from files present in the repo.
 - Builds with PlatformIO if `platformio.ini` exists.
 - Builds with ESP-IDF if `CMakeLists.txt` exists **and** the `IDF_VERSION`
   repository variable is set (the version is a deliberate manual choice, not a guess).
 - If neither is present, the job reports "no firmware target configured" and passes.
+- Builds and tests the dashboard, then statically validates the Raspberry Pi
+  Compose configuration and verification script.
 
 The pinned RuView path does not use the `IDF_VERSION` repository variable; its
 container image and display-less DevKitC defaults are declared in the lock and
