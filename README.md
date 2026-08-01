@@ -49,11 +49,17 @@ Actions runs the same build and publishes the package as a workflow artifact.
 ## Portable demo dashboard
 
 The offline-friendly visitor and operator interface lives in
-`demo/dashboard/`. It currently runs with clearly labeled preview data while the
-Raspberry Pi adapter is developed.
+`demo/dashboard/`. Its local adapter now converts the pinned RuView health and
+sensing responses into a small validated snapshot. The interface switches to
+live mode only for a complete, recent ESP32 update; every other state remains
+clearly labeled as preview, simulation, waiting, offline, or unavailable.
 
 ```powershell
 cd demo\dashboard
 npm.cmd ci
 npm.cmd run dev
 ```
+
+Copy `demo/dashboard/.dev.vars.example` to the ignored `.dev.vars` file to set
+the local RuView origin and, when enabled, its API token. Keep all real network
+values and credentials outside Git.
