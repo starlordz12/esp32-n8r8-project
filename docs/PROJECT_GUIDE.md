@@ -138,6 +138,32 @@ placed in `sdkconfig.defaults`, source files, captured logs, or Git.
 7. Repeat for the remaining boards with unique node IDs.
 8. Position and calibrate the nodes only after the first end-to-end path is stable.
 
+### Portable demo dashboard
+
+`demo/dashboard/` contains the offline-friendly presentation layer for the
+portable Raspberry Pi kit. It separates the simple visitor experience from the
+operator readiness view and includes:
+
+- A large room-activity display with plain-language status.
+- A three-step guided demonstration.
+- A camera-free and microphone-free privacy explanation.
+- Node-health and setup checks for the person operating the kit.
+- Responsive layouts for a tablet, laptop, or kiosk display.
+
+The initial scaffold uses clearly labeled preview data. It must not imply a live
+hardware connection until the Raspberry Pi adapter is implemented and tested.
+Run it locally with Node.js 22.13 or later:
+
+```powershell
+cd demo\dashboard
+npm.cmd ci
+npm.cmd run dev
+```
+
+Network names, credentials, Pi addresses, node identities, and room-specific
+placement remain outside Git. The dashboard must remain usable on the portable
+router network without cloud or internet access.
+
 ---
 
 ## 4. Hardware

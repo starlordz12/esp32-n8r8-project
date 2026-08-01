@@ -45,3 +45,15 @@ Actions runs the same build and publishes the package as a workflow artifact.
 ## CI
 
 `.github/workflows/build.yml` is build-only. No flashing, no hardware tests.
+
+## Portable demo dashboard
+
+The offline-friendly visitor and operator interface lives in
+`demo/dashboard/`. It currently runs with clearly labeled preview data while the
+Raspberry Pi adapter is developed.
+
+```powershell
+cd demo\dashboard
+npm.cmd ci
+npm.cmd run dev
+```
