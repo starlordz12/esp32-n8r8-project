@@ -365,6 +365,12 @@ h3 {
   background: rgba(243, 199, 104, 0.08);
 }
 
+.preview-pill.live-pill {
+  color: var(--mint);
+  border-color: rgba(124, 224, 166, 0.28);
+  background: rgba(124, 224, 166, 0.1);
+}
+
 .room-map {
   position: relative;
   min-height: 450px;
@@ -942,6 +948,11 @@ h3 {
   color: #e8ca8a;
 }
 
+.adapter-status.adapter-live {
+  border-color: rgba(124, 224, 166, 0.28);
+  color: var(--mint);
+}
+
 .nodes-card {
   grid-column: 1 / -1;
 }
@@ -954,6 +965,13 @@ h3 {
 .node-table {
   margin-top: 20px;
   border-top: 1px solid var(--line);
+}
+
+.empty-node-state {
+  margin: 0;
+  padding: 24px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
 }
 
 .node-row {
@@ -1022,6 +1040,12 @@ h3 {
 .checklist-card li span {
   color: var(--mint);
   font-weight: 900;
+}
+
+.checklist-card li.complete {
+  border-color: rgba(124, 224, 166, 0.2);
+  background: rgba(124, 224, 166, 0.05);
+  color: var(--text);
 }
 
 .checklist-card li.pending span {
