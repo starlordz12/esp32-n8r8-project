@@ -68,7 +68,7 @@ curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
 curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
   -H "@$header_file" http://127.0.0.1:3000/api/v1/sensing/latest >"$latest_file"
 curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
-  http://127.0.0.1:8080/api/ruvview/snapshot >"$dashboard_file"
+  http://127.0.0.1:8080/api/ruview/snapshot >"$dashboard_file"
 
 jq -e 'type == "object"' "$health_file" "$latest_file" >/dev/null
 jq -e '.schemaVersion == 1 and (.mode == "live" or .mode == "preview")' \

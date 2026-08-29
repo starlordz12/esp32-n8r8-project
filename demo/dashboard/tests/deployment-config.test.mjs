@@ -35,6 +35,10 @@ test("Pi compose pins images and keeps the raw RuView API on loopback", async ()
   assert.ok(server.ports.includes("${RUVIEW_WS_BIND_ADDRESS:-127.0.0.1}:3001:3001/tcp"));
   assert.ok(server.ports.includes("${RUVIEW_UDP_BIND_ADDRESS:-0.0.0.0}:5005:5005/udp"));
   assert.ok(dashboard.ports.includes("${DASHBOARD_BIND_ADDRESS:-0.0.0.0}:8080:3000/tcp"));
+  assert.match(
+    dashboard.healthcheck.test.at(-1),
+    /\/api\/ruview\/snapshot/,
+  );
 
   for (const service of [server, dashboard]) {
     assert.deepEqual(service.cap_drop, ["ALL"]);
@@ -69,11 +73,14 @@ test("Pi dashboard image uses an immutable Node base and an unprivileged user", 
 
 test("verification script checks the locked image and explicit live state", async () => {
   const script = await textFile(deployRoot, "verify.sh");
+  const normalizedScript = script.replaceAll("\r\n", "\n");
 
-  assert.ok(script.startsWith("#!/usr/bin/env bash\nset -euo pipefail\n"));
-  assert.match(script, /ruview-server\.lock\.json/);
-  assert.match(script, /\.image\.manifestDigest/);
-  assert.match(script, /--expect-live/);
-  assert.match(script, /\.mode == "live" and \.connection == "connected"/);
-  assert.doesNotMatch(script, /source\s+\.env/);
+  assert.ok(normalizedScript.startsWith("#!/usr/bin/env bash\nset -euo pipefail\n"));
+  assert.match(normalizedScript, /ruview-server\.lock\.json/);
+  assert.match(normalizedScript, /\.image\.manifestDigest/);
+  assert.match(normalizedScript, /--expect-live/);
+  assert.match(normalizedScript, /\/api\/ruview\/snapshot/);
+  assert.match(normalizedScript, /\.mode == "live" and \.connection == "connected"/);
+  assert.doesNotMatch(normalizedScript, /\/api\/ruvview\/snapshot/);
+  assert.doesNotMatch(normalizedScript, /source\s+\.env/);
 });
