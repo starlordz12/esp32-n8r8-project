@@ -5,9 +5,21 @@ function Resolve-RuViewPython {
         $command = Get-Command $candidate -ErrorAction SilentlyContinue
         if ($command) {
             $prefixArguments = if ($candidate -eq 'py') { @('-3') } else { @() }
-            return [pscustomobject]@{
-                Path = $command.Source
-                PrefixArguments = $prefixArguments
+            try {
+                $versionOutput = (& $command.Source @prefixArguments --version 2>&1 | Out-String).Trim()
+                if ($LASTEXITCODE -eq 0 -and $versionOutput -match '^Python (\d+)\.(\d+)') {
+                    $major = [int]$Matches[1]
+                    $minor = [int]$Matches[2]
+                    if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 10)) {
+                        return [pscustomobject]@{
+                            Path = $command.Source
+                            PrefixArguments = $prefixArguments
+                        }
+                    }
+                }
+            }
+            catch {
+                continue
             }
         }
     }

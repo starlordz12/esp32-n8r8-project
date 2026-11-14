@@ -78,11 +78,13 @@ The build creates an ignored artifact directory containing four binaries,
 `flash-manifest.json`, and `SHA256SUMS.txt`. The script verifies the exact pinned
 commit, reviewed offsets, file names, and hashes before returning success.
 
-Install Python 3.10+ and the upstream provisioning requirements on the
-development machine:
+Install Python 3.10+ and create an ignored project-local environment for the
+flash and provisioning tools. Keep this PowerShell session open for steps 4-5:
 
 ```powershell
-py -3 -m pip install "esptool>=5.0" esp-idf-nvs-partition-gen
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install "esptool>=5.0" esp-idf-nvs-partition-gen
+$env:PATH = "$(Resolve-Path .venv\Scripts);$env:PATH"
 ```
 
 ## 4. Flash exactly one node
