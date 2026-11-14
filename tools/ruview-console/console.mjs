@@ -5,11 +5,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
 import { loadActivityModel, applyActivityModel } from './activity-model.mjs';
+import { createTrainingController } from './training-controller.mjs';
 
 const port = 8092;
 const host = `127.0.0.1:${port}`;
 const origin = `http://${host}`;
-const model = process.env.RUVIEW_ACTIVITY_MODEL
+let model = process.env.RUVIEW_ACTIVITY_MODEL
   ? loadActivityModel(readFileSync(process.env.RUVIEW_ACTIVITY_MODEL, 'utf8')) : null;
 const modelNodeId = Number(process.env.RUVIEW_MODEL_NODE_ID);
 if (model && (!Number.isInteger(modelNodeId) || modelNodeId < 0 || modelNodeId > 255)) {
@@ -29,7 +30,7 @@ const badge = `<aside id="local-activity-badge" role="status" style="position:st
 <script type="importmap">{"imports":{"/ui/components/TrainingPanel.js":"/ui/components/TrainingPanel.js?activity=2","/ui/components/ModelPanel.js":"/ui/components/ModelPanel.js?activity=2"}}</script>
 <script type="module">
 const badge=document.getElementById('local-activity-badge');
-async function update(){try{const r=await fetch('/local/activity/status');const s=await r.json();badge.textContent=s.status==='live'?'Local trained room activity · '+s.label.replaceAll('_',' ')+' · '+Math.round(s.confidence*100)+'%':'Local room activity model · '+(s.reason||s.status);badge.style.background=s.status==='live'?'#12352c':'#614515';}catch{badge.textContent='Local room activity model · Connection unavailable';badge.style.background='#614515';}}
+async function update(){try{const r=await fetch('/local/activity/status');const s=await r.json();badge.textContent=s.status==='live'?(s.inference_method==='calibrated_presence_only'?'Calibrated room presence - ':'Calibrated presence + learned motion - ')+s.label.replaceAll('_',' ')+(s.confidence==null?' - calibrated presence':' - '+Math.round(s.confidence*100)+'% learned motion confidence'):'Local room activity model · '+(s.reason||s.status);badge.style.background=s.status==='live'?'#12352c':'#614515';}catch{badge.textContent='Local room activity model · Connection unavailable';badge.style.background='#614515';}}
 update();setInterval(update,1000);
 </script>`;
 let token;
@@ -44,6 +45,16 @@ try {
   console.error('Cannot load existing Pi API credential. No credential contents were logged.');
   process.exit(1);
 }
+async function readFrame() {
+  const response = await fetch('http://127.0.0.1:3000/api/v1/sensing/latest', {
+    headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(2500),
+  });
+  if (!response.ok) throw new Error('Live sensing unavailable');
+  return response.json();
+}
+const training = model ? createTrainingController({ modelPath: process.env.RUVIEW_ACTIVITY_MODEL,
+  nodeId: modelNodeId, getModel: () => model,
+  setModel: value => { model = value; lastActivity = null; lastActivityAt = 0; }, readFrame }) : null;
 const wsPaths = new Set(['/ws/sensing', '/ws/introspection', '/api/v1/stream/pose']);
 const writePaths = new Set(['/api/v1/calibration/start', '/api/v1/calibration/stop', '/api/v1/calibration/cancel', '/api/v1/calibration/reset', '/api/v1/pose/calibrate']);
 const readApi = /^\/api\/v1\/(?:info$|status$|metrics$|sensing\/|nodes(?:\/|$)|mesh(?:\/|$)|vital-signs$|edge-vitals$|wasm-events$|model\/|models(?:\/|$)|pose\/|stream\/status$|introspection\/snapshot$|calibration\/status$|adaptive\/status$|rf\/vendors|radar\/latest$|csi\/)/;
@@ -70,6 +81,21 @@ const localModules = {
 };
 const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, origin).pathname;
+  const actions = new Set(['/local/activity/training/capture', '/local/activity/training/cancel',
+    '/local/activity/training/train', '/local/activity/training/activate', '/local/activity/training/mode']);
+  if (training && valid(req) && (path === '/local/activity/training' && req.method === 'GET' ||
+      actions.has(path) && req.method === 'POST' && req.headers.origin === origin)) {
+    try {
+      let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 1024) throw new Error('Request too large'); }
+      const input = body ? JSON.parse(body) : {};
+      const result = path.endsWith('/capture') ? await training.start(input.label, input.confirmed) :
+        path.endsWith('/cancel') ? training.cancel() : path.endsWith('/train') ? training.train() :
+        path.endsWith('/activate') ? training.activate(input.candidate_id) :
+        path.endsWith('/mode') ? training.mode(input.mode) : training.status();
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(result));
+    } catch (error) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: error.message.startsWith('E') ? 'Local training file operation failed' : error.message })); }
+    return;
+  }
   if (model && Object.hasOwn(localModules, path) && req.method === 'GET' && valid(req)) {
     res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' });
     res.end(localModules[path]); return;
@@ -90,7 +116,7 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ model_loaded: !!model,
       training: model ? { status: 'trained', version: model.version,
         trained_frames: model.trained_frames, classes: model.class_names,
-        node_id: modelNodeId, model_id: model.id, validation: 'pending_room_trials' } : null,
+        node_id: modelNodeId, model_id: model.id, inference_mode: model.inference_mode || 'learned_three_class', validation: 'pending_room_trials' } : null,
       ...activity }));
     return;
   }
@@ -103,7 +129,7 @@ const server = http.createServer(async (req, res) => {
       const responseHeaders = { ...reply.headers, 'cache-control': 'no-store',
         'referrer-policy': 'no-referrer', 'cross-origin-resource-policy': 'same-origin' };
       if (model && req.method === 'GET' && reply.statusCode === 200 &&
-          (path === '/api/v1/sensing/latest' || path === '/ui/index.html' || path === '/ui/')) {
+          (path === '/api/v1/sensing/latest' || path === '/ui/index.html' || path === '/ui/' || path === '/ui/components/SensingTab.js')) {
         delete responseHeaders['content-length'];
         delete responseHeaders['content-encoding'];
         let body = ''; let size = 0;
@@ -111,6 +137,7 @@ const server = http.createServer(async (req, res) => {
         reply.on('end', () => {
           try {
             const output = path === '/api/v1/sensing/latest' ? JSON.stringify(transform(JSON.parse(body)))
+              : path === '/ui/components/SensingTab.js' ? body.replace("confPct + '%'", "c.confidence == null ? 'Calibrated presence' : confPct + '%'").replace("motion + ' ' + conf + '%'", "nf.classification?.confidence == null ? motion + ' - Calibrated' : motion + ' ' + conf + '%'")
               : body.replace(/<body([^>]*)>/i, `<body$1>${badge}`)
                 .replace('Record CSI data, train pose estimation models, and manage .rvf files',
                   'Trained room activity, live predictions, empty-room baseline, and accuracy checks')

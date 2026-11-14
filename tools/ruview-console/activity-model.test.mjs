@@ -57,3 +57,27 @@ test('simulation, stale data, different hardware and multiple nodes never acquir
     assert.equal(output.classification, bad.classification);
   }
 });
+
+test('combined inference uses fresh calibrated presence and learned conditional motion without fabricating absence confidence', () => {
+  const m = model({ inference_mode: 'calibrated_presence_learned_motion' });
+  const f = frame();
+  f.calibrated_presence_evidence = { schema: 'ruview.calibration.calibrated-presence-evidence.v2',
+    inference_node_id: 42, source_node_ids: [42], source_tick: 99, presence: false,
+    model_id: 'baseline-test', observed_at_unix_ms: Date.now() };
+  const empty = applyActivityModel(f,m,42);
+  assert.equal(empty.classification.motion_level,'absent');
+  assert.equal(empty.classification.confidence,null);
+  const seated = applyActivityModel({ ...f,calibrated_presence_evidence: { ...f.calibrated_presence_evidence,presence:true } },m,42);
+  assert.equal(seated.classification.motion_level,'present_still');
+  assert.equal(seated.classification.confidence,.5);
+  const presenceOnly = applyActivityModel({ ...f,calibrated_presence_evidence: { ...f.calibrated_presence_evidence,presence:true } },
+    { ...m,inference_mode:'calibrated_presence_only' },42);
+  assert.equal(presenceOnly.classification.motion_level,'present');
+  assert.equal(presenceOnly.classification.confidence,null);
+  assert.equal(presenceOnly.local_activity.scope,'room_presence_only');
+  for (const bad of [null,{ ...f.calibrated_presence_evidence,source_tick:98 },
+    { ...f.calibrated_presence_evidence,observed_at_unix_ms:Date.now()-6000 },
+    { ...f.calibrated_presence_evidence,source_node_ids:[9] }]) {
+    assert.equal(applyActivityModel({ ...f,calibrated_presence_evidence:bad },m,42).local_activity.status,'unavailable');
+  }
+});

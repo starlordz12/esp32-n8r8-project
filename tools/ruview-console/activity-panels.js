@@ -20,7 +20,7 @@ export function baselineReady(status, capture) {
     Number.isFinite(status.min_frames) && status.min_frames >= 1000 &&
     status.elapsed_s >= status.min_duration_s && status.frame_count >= status.min_frames;
 }
-const describe = label => ({ absent:'Empty room', present_still:'Present, still', present_moving:'Moving', active:'Active' })[label] || label;
+const describe = label => ({ present:'Person present', absent:'Empty room', present_still:'Present, still', present_moving:'Moving', active:'Active' })[label] || label;
 class Panel {
   constructor(container, html) {
     this.container = typeof container === 'string' ? document.getElementById(container) : container;
@@ -37,18 +37,23 @@ class Panel {
 }
 export class ModelPanel extends Panel {
   constructor(container) {
-    super(container, `<h3>Room activity model</h3><output data-field="training" aria-live="polite">Checking trained model…</output><p data-field="details"></p><h4>Live prediction</h4><output data-field="prediction" aria-live="polite">Connecting…</output><p data-field="probabilities"></p><p class="activity-warning">Room accuracy: awaiting fresh empty, seated, and walking trials. Model confidence is not measured accuracy.</p><p>This classifier detects room presence and movement. Body pose and vital signs have not been validated.</p>`);
+    super(container, `<h3>Room activity model</h3><output data-field="training" aria-live="polite">Checking trained model…</output><p data-field="details"></p><label>Display mode <select data-field="mode"><option value="calibrated_presence_only">Calibrated presence only</option><option value="calibrated_presence_learned_motion">Experimental learned motion</option></select></label><p class="activity-warning">Learned motion is experimental and has not passed independent room validation.</p><h4>Room decision</h4><output data-field="prediction" aria-live="polite">Connecting…</output><p data-field="probabilities"></p><h4>Calibrated room presence</h4><output data-field="presence" aria-live="polite">Checking baseline evidence…</output><output class="activity-warning" data-field="agreement"></output><p class="activity-warning">Trained does not mean validated. Complete fresh empty, seated, and walking checks. Model confidence is not measured accuracy.</p><p>This classifier detects room presence and movement. Body pose and vital signs have not been validated.</p>`);
+    this.el('mode').addEventListener('change', async () => {try{await api('/local/activity/training/mode',{mode:this.el('mode').value});await this.refresh();}catch(error){this.text('agreement',error.message);}});
     this.refresh();
   }
   async refresh() {
     clearTimeout(this.timer);
     try {
       const s = await api('/local/activity/status'); if (this.disposed) return;
+      if (s.training?.inference_mode && document.activeElement !== this.el('mode')) this.el('mode').value = s.training.inference_mode;
       this.text('training', s.model_loaded ? 'Trained · Loaded · Room activity' : 'No room activity model loaded');
       this.el('training').className = s.model_loaded ? 'activity-ok' : 'activity-warning';
       this.text('details', s.training ? `Version ${s.training.version} · ${s.training.trained_frames.toLocaleString()} training frames · ${s.training.classes.length} classes · Bound node ${s.training.node_id}` : '');
-      this.text('prediction', s.status === 'live' ? `${describe(s.label)} · ${Math.round(s.confidence*100)}% model confidence` : `Prediction unavailable: ${(s.reason || s.status).replaceAll('_',' ')}`);
+      this.text('prediction', s.status === 'live' ? s.confidence == null ? `${describe(s.label)} - calibrated presence` : `${describe(s.label)} - ${Math.round(s.confidence*100)}% learned motion confidence` : `Prediction unavailable: ${(s.reason || s.status).replaceAll('_',' ')}`);
       this.text('probabilities', s.status === 'live' ? Object.entries(s.probabilities).map(([k,v]) => `${describe(k)} ${Math.round(v*100)}%`).join(' · ') : '');
+      const e = s.calibrated_presence;
+      this.text('presence', e?.status === 'live' ? (e.presence ? 'Person present · calibrated signal' : 'Empty room · calibrated signal') : 'Fresh calibrated evidence unavailable');
+      this.text('agreement', e?.status === 'live' && !e.agrees_with_activity_model ? (['calibrated_presence_learned_motion','calibrated_presence_only'].includes(s.inference_method) ? 'The raw activity model disagrees. Room presence comes from the fresh calibrated signal.' : 'DISAGREEMENT: the activity model and calibrated presence differ. Do not treat this model as validated.') : '');
     } catch { if (!this.disposed) this.text('prediction','Connection unavailable; no live prediction.'); }
     if (!this.disposed) this.timer = setTimeout(() => this.refresh(), 2000);
   }
@@ -62,22 +67,42 @@ export class TrainingPanel extends Panel {
 <button data-field="start" disabled>Start new baseline (20-second delay)</button><button data-field="cancel" disabled>Cancel baseline</button>
 <p class="activity-warning">A new capture replaces the current runtime baseline. Baseline persistence across a Pi restart is not configured. This does not retrain the activity classifier.</p>
 <h4>2. Check activity accuracy</h4><p>Set the known room condition, then start a 20-second check (after a 20-second preparation countdown). Empty means nobody in the room; seated means sitting still; walking means moving around the desk.</p>
-<label>Expected condition <select data-field="expected"><option value="absent">Empty room</option><option value="present_still">Seated still</option><option value="present_moving">Walking</option></select></label>
-<button data-field="validate">Start activity check</button><output data-field="trial" aria-live="polite">No new checks yet. Results stay on this page and are not training data.</output><output data-field="error" role="alert"></output>`);
+<label>Expected condition <select data-field="expected"><option value="absent">Empty room</option><option value="present">Person present (presence only)</option><option value="present_still">Seated still</option><option value="present_moving">Walking</option></select></label>
+<button data-field="validate">Start activity check</button><output data-field="trial" aria-live="polite">No new checks yet. Results stay on this page and are not training data.</output><h4>3. Train for this room</h4><p>Capture each condition with the printer stopped. Each capture starts after 20 seconds and records for 30 seconds. New examples replace that condition's previous examples; the active model stays in use until you activate a candidate.</p><label>Training condition <select data-field="training-label"><option value="absent">Empty room</option><option value="present_still">Seated still</option><option value="present_moving">Walking</option></select></label><label><input data-field="training-confirm" type="checkbox"> I will maintain the selected condition throughout the capture.</label><button data-field="capture" disabled>Capture training examples</button><button data-field="cancel-training" disabled>Cancel training capture</button><output data-field="training-progress" aria-live="polite">Checking saved examples…</output><button data-field="train" disabled>Train candidate model</button><output data-field="candidate"></output><button data-field="activate" disabled>Activate candidate (back up current model)</button><output data-field="error" role="alert"></output>`);
     this.el('empty').addEventListener('change', () => this.updateButtons());
     this.el('start').addEventListener('click', () => this.startBaseline());
     this.el('cancel').addEventListener('click', () => this.cancelBaseline());
     this.el('validate').addEventListener('click', () => this.validate());
+    this.el('training-confirm').addEventListener('change', () => this.updateButtons());
+    for (const [field, action] of [['capture','capture'],['cancel-training','cancel'],['train','train'],['activate','activate']]) {
+      this.el(field).addEventListener('click', async () => {
+        this.trainingRequest = true; this.updateButtons();
+        try { this.trainingState = await api('/local/activity/training/'+action, action === 'capture' ? {label:this.el('training-label').value,confirmed:this.el('training-confirm').checked} : action === 'activate' ? {candidate_id:this.trainingState.candidate.id} : {}); this.text('error', action === 'activate' ? 'New model activated. Run fresh accuracy checks before relying on it.' : ''); }
+        catch(error) { this.text('error',error.message); }
+        finally { this.trainingRequest = false; this.updateButtons(); }
+      });
+    }
     this.refresh();
   }
   updateButtons() {
-    this.el('start').disabled = this.busy || this.trialRunning || !this.el('empty').checked || !this.binding?.binding_digest || ['collecting','uncalibrated'].includes(this.calibration?.status);
+    const trainingBusy = !!this.trainingRequest || this.trainingState?.status === 'countdown' || this.trainingState?.status === 'recording';
+    this.el('start').disabled = trainingBusy || this.busy || this.trialRunning || !this.el('empty').checked || !this.binding?.binding_digest || ['collecting','uncalibrated'].includes(this.calibration?.status);
     this.el('cancel').disabled = !this.busy;
-    this.el('validate').disabled = !!this.busy || !!this.trialRunning || ['collecting','uncalibrated'].includes(this.calibration?.status);
+    this.el('validate').disabled = trainingBusy || !!this.busy || !!this.trialRunning || ['collecting','uncalibrated'].includes(this.calibration?.status);
+    const blocked = trainingBusy || !!this.busy || !!this.trialRunning || ['collecting','uncalibrated'].includes(this.calibration?.status);
+    this.el('capture').disabled = blocked || !this.el('training-confirm').checked;
+    this.el('cancel-training').disabled = !trainingBusy;
+    this.el('train').disabled = blocked || !this.trainingState || Object.values(this.trainingState.counts).some(n => n < 25);
+    this.el('activate').disabled = blocked || !this.trainingState?.candidate;
   }
   async refresh() {
     try {
       const s = await api('/api/v1/calibration/status'); if (this.disposed) return;
+      this.trainingState = await api('/local/activity/training');
+      const t = this.trainingState;
+      const remaining = t.capture ? Math.max(0,Math.ceil(((t.status === 'countdown' ? t.capture.starts_at : t.capture.ends_at)-Date.now())/1000)) : 0;
+      this.text('training-progress', `${t.status}${t.capture ? ` · ${describe(t.capture.label)} · ${remaining}s remaining` : ''} · ${Object.entries(t.counts).map(([label,n]) => `${describe(label)}: ${n}`).join(' · ')}${t.error ? ` · ${t.error}` : ''}`);
+      this.text('candidate', t.candidate ? `Candidate: ${t.candidate.training_frames} fitting frames · raw three-class holdout ${Math.round(100*t.candidate.holdout_accuracy)}% on ${t.candidate.holdout_frames} frames; still/moving holdout ${Math.round(100*t.candidate.motion_holdout_accuracy)}% on ${t.candidate.motion_holdout_frames} frames. The current display mode is retained on activation; learned motion remains experimental. Fresh room trials are still required.` : 'No candidate waiting for activation.');
       this.calibration = s;
       if (s.binding_digest && s.source_node_ids?.length === 1) this.binding = s;
       const elapsed = Math.floor(s.elapsed_s || 0), required = Math.ceil(s.min_duration_s || 600);

@@ -184,8 +184,10 @@ in ignored local configuration or private user storage; never commit them.
 
 The classifier bridge has been activated locally and checked over HTTP and
 WebSocket. Its native Training tab shows the loaded activity model, baseline
-controls, and room-validation checks; Sensing uses the trained room and node
-labels. Fresh known-condition room trials are still required to establish
+controls, private labeled captures, candidate training/activation, and room
+validation checks. Sensing room and node labels follow the selected inference
+mode. The local installation uses calibrated presence-only mode; learned motion
+remains experimental after independent seated validation failed. Fresh known-condition room trials are still required to establish
 accuracy. A room-activity model
 does not establish trained body-pose tracking. Adding nodes or moving hardware
 requires revisiting the room model and calibration.

@@ -68,7 +68,30 @@ export function applyActivityModel(frame, model, nodeId) {
   if (!node || !perNode || perNode.stale || (Number.isFinite(perNode.age_ms) && perNode.age_ms > 5000)) return unavailable('trained_node_not_fresh');
   const features = activityFeatures(perNode.features, node.amplitude);
   if (!features) return unavailable('complete_raw_features_required');
-  const prediction = predictActivity(model, features);
+  let prediction = predictActivity(model, features);
+  const learnedPrediction = prediction;
+  const evidence = frame.calibrated_presence_evidence;
+  const calibrated = evidence?.schema === 'ruview.calibration.calibrated-presence-evidence.v2' &&
+    evidence.inference_node_id === nodeId && evidence.source_tick === frame.tick &&
+    Array.isArray(evidence.source_node_ids) && evidence.source_node_ids.length === 1 && evidence.source_node_ids[0] === nodeId &&
+    typeof evidence.presence === 'boolean' && Number.isFinite(evidence.observed_at_unix_ms) &&
+    Math.abs(Date.now() - evidence.observed_at_unix_ms) < 5000
+      ? { status: 'live', presence: evidence.presence, model_id: evidence.model_id,
+        agrees_with_activity_model: evidence.presence === (prediction.label !== 'absent') }
+      : { status: 'unavailable' };
+  if (['calibrated_presence_learned_motion','calibrated_presence_only'].includes(model.inference_mode)) {
+    if (calibrated.status !== 'live') return unavailable('fresh_calibrated_presence_required');
+    if (model.inference_mode === 'calibrated_presence_only') {
+      prediction = { label: calibrated.presence ? 'present' : 'absent', confidence: null, probabilities: {} };
+    } else {
+    const still = prediction.probabilities.present_still, moving = prediction.probabilities.present_moving;
+    if (!Number.isFinite(still) || !Number.isFinite(moving) || still + moving <= 0) return unavailable('motion_classes_required');
+    const probabilities = { present_still: still/(still+moving), present_moving: moving/(still+moving) };
+    const label = moving > still ? 'present_moving' : 'present_still';
+    prediction = calibrated.presence ? { label, confidence: probabilities[label], probabilities }
+      : { label: 'absent', confidence: null, probabilities: {} };
+    }
+  }
   const classification = { presence: prediction.label !== 'absent',
     motion_level: prediction.label, confidence: prediction.confidence };
   return { ...frame,
@@ -82,6 +105,8 @@ export function applyActivityModel(frame, model, nodeId) {
       node_inference: { ...n.node_inference, classification: prediction.label, confidence: prediction.confidence } })),
     local_activity: { status: 'live', model_id: model.id, model_version: model.version,
       trained_frames: model.trained_frames, node_id: nodeId, ...prediction,
-      scope: 'room_activity_only', source_tick: frame.tick },
+      calibrated_presence: calibrated,
+      inference_method: model.inference_mode || 'learned_three_class', learned_prediction: learnedPrediction,
+      scope: model.inference_mode === 'calibrated_presence_only' ? 'room_presence_only' : 'room_activity_only', source_tick: frame.tick },
   };
 }

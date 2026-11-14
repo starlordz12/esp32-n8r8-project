@@ -42,6 +42,21 @@ exported learned weights itself. Original classifications are retained as
 `upstream_classification`, `upstream_room_inference`, and
 `upstream_node_inference`; `local_activity` identifies the trained result.
 
+The web UI can capture labeled examples privately, fit a regularized softmax
+candidate with a temporal capture holdout, and activate it with a backup of the
+previous model. The display-mode selector separates calibrated presence-only operation from
+experimental learned motion. The local installation uses presence-only mode
+after motion failed independent seated validation. Experimental combined mode
+uses fresh calibrated presence to distinguish empty from occupied, then learned
+conditional probabilities for still versus moving. Candidate activation retains
+presence-only mode when that mode is already selected.
+The raw three-class result is retained as `learned_prediction`. Calibration must
+match the live tick, trained radio, schema, and freshness limit; otherwise this
+mode abstains. Calibrated presence decisions have no invented confidence percentage. Presence
+itself can still make errors; this is not a validated person counter or safety
+system. Motion capture holdout scores must not be substituted for new room trials. Capture
+holdout performance does not establish independent room accuracy.
+
 The feature contract is seven per-node measurements plus eight statistics over
 the first 56 amplitudes. Only model version 2 is accepted. Predictions abstain on
 stale/simulated data, missing features, a different bound node, or multiple nodes.
@@ -74,3 +89,9 @@ Check HTTP and WebSocket predictions on separate empty, seated, and walking
 samples. Training-set accuracy is not independent validation. Verify that source
 data is live ESP32, that the local model banner reflects availability, and that
 upstream fields remain available. Recheck cross-origin and write restrictions.
+
+Training feature samples are saved beside the configured model as a private
+`*.samples.local.json` file and reused only for the same bound radio within one
+hour. Candidate activation and mode changes back up the previous model before
+an atomic file replacement. No Pi restart, sudo export, or upstream model write
+is needed for local training. The upstream model remains independently managed.
