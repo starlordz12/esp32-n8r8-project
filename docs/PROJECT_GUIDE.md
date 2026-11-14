@@ -16,7 +16,7 @@ The target hardware and software stack are confirmed:
 - ESP-IDF v5.4, built with RuView's display-less DevKitC configuration overlay
 
 The build integration pins RuView commit
-`f783df234eec22929b88e256422cbfc50579196b` in `ruview.lock.json`. The
+`a1754774a975a775c55dd4519f588eaba9ba1857` (firmware 0.8.18) in `ruview.lock.json`. The
 `scripts/Sync-RuView.ps1` helper sparsely fetches only the firmware subtree into
 the ignored `.deps/` directory, so builds are reproducible without copying
 upstream source into this repository.
@@ -183,8 +183,9 @@ Follow [PI_ONE_NODE_BRINGUP.md](PI_ONE_NODE_BRINGUP.md) from a clean Pi 5. Prove
 one node with `deploy/pi/verify.sh --expect-live` and complete a stability soak
 before adding another node. The server-image lock is separate from the firmware
 lock because upstream did not publish an image for the exact firmware commit;
-the recorded image commit was reviewed to confirm that no server or Docker files
-changed between those commits.
+the server image is pinned separately to commit
+`094e1400719ded1283c67d23b9c737f6738a3244`. The firmware release commit
+is an ancestor of that server revision; verify compatibility with one live node.
 
 ---
 
@@ -220,6 +221,7 @@ commit pinned in `ruview.lock.json`.
 | OTA application 0    | `0x020000` | `0x200000` |
 | OTA application 1    | `0x220000` | `0x200000` |
 | SPIFFS               | `0x420000` | `0x1E0000` |
+| FAT storage           | `0x600000` | `0x200000` |
 
 ### Pin map
 

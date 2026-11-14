@@ -9,7 +9,7 @@ const dashboardRoot = process.cwd();
 const repoRoot = path.resolve(dashboardRoot, "../..");
 const deployRoot = path.join(repoRoot, "deploy/pi");
 const expectedServerDigest =
-  "sha256:e2186cb9fbb8f52f4e341bc90bef86eba323afbafff134b1eaf498e83a2e5d58";
+  "sha256:948283a386564eada7fc4d43dd1de492ebf7702a3bb8a0c577872dbc7c605333";
 const expectedNodeDigest =
   "sha256:83fdfa2a4de32d7f8d79829ea259bd6a4821f8b2d123204ac467fbe3966450fc";
 
@@ -25,10 +25,12 @@ test("Pi compose pins images and keeps the raw RuView API on loopback", async ()
 
   assert.equal(
     server.image,
-    `docker.io/ruvnet/wifi-densepose@${expectedServerDigest}`,
+    `ghcr.io/ruvnet/wifi-densepose@${expectedServerDigest}`,
   );
   assert.equal(server.environment.CSI_SOURCE, "esp32");
   assert.match(server.environment.RUVIEW_API_TOKEN, /:\?Set RUVIEW_API_TOKEN/);
+  assert.equal(server.environment.SENSING_ALLOWED_HOSTS, "sensing-server");
+  assert.match(server.environment.RUVIEW_UDP_ALLOW, /:\?Set RUVIEW_UDP_ALLOW/);
   assert.match(dashboard.environment.RUVIEW_API_TOKEN, /:\?Set RUVIEW_API_TOKEN/);
   assert.equal(dashboard.environment.RUVIEW_BASE_URL, "http://sensing-server:3000");
   assert.ok(server.ports.includes("${RUVIEW_HTTP_BIND_ADDRESS:-127.0.0.1}:3000:3000/tcp"));

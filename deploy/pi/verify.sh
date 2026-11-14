@@ -73,6 +73,8 @@ curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
 jq -e 'type == "object"' "$health_file" "$latest_file" >/dev/null
 jq -e '.schemaVersion == 1 and (.mode == "live" or .mode == "preview")' \
   "$dashboard_file" >/dev/null
+jq -e '.connection != "error" and .connection != "unconfigured"' \
+  "$dashboard_file" >/dev/null
 
 if [[ "$expect_live" == true ]]; then
   jq -e '(.source | ascii_downcase | startswith("esp32")) and

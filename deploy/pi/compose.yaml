@@ -2,13 +2,15 @@ name: ruview-portable
 
 services:
   sensing-server:
-    image: docker.io/ruvnet/wifi-densepose@sha256:e2186cb9fbb8f52f4e341bc90bef86eba323afbafff134b1eaf498e83a2e5d58
+    image: ghcr.io/ruvnet/wifi-densepose@sha256:948283a386564eada7fc4d43dd1de492ebf7702a3bb8a0c577872dbc7c605333
     environment:
       CSI_SOURCE: esp32
       MODELS_DIR: /app/data/models
       RUST_LOG: ${RUVIEW_LOG_LEVEL:-info}
       RUVIEW_API_TOKEN: ${RUVIEW_API_TOKEN:?Set RUVIEW_API_TOKEN in deploy/pi/.env}
       RUVIEW_BIND_ADDR: 0.0.0.0
+      SENSING_ALLOWED_HOSTS: sensing-server
+      RUVIEW_UDP_ALLOW: ${RUVIEW_UDP_ALLOW:?Set RUVIEW_UDP_ALLOW in deploy/pi/.env}
     ports:
       - "${RUVIEW_HTTP_BIND_ADDRESS:-127.0.0.1}:3000:3000/tcp"
       - "${RUVIEW_WS_BIND_ADDRESS:-127.0.0.1}:3001:3001/tcp"

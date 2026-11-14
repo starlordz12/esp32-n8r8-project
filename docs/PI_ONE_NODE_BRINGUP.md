@@ -52,6 +52,7 @@ chmod 600 .env
 sed -i '/^RUVIEW_API_TOKEN=/d' .env
 printf 'RUVIEW_API_TOKEN=' >>.env
 openssl rand -hex 32 >>.env
+# Edit RUVIEW_UDP_ALLOW in .env to the private CIDR containing the ESP32 nodes.
 sudo docker compose pull sensing-server
 sudo docker compose build --pull dashboard
 sudo docker compose up -d
