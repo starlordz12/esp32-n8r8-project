@@ -174,6 +174,20 @@ router network without cloud or internet access.
 
 ---
 
+### Native activity console
+
+`tools/ruview-console/` contains a localhost bridge for the native RuView UI and
+a trained room-activity classifier. Its setup and validation steps are in
+`tools/ruview-console/README.md`. Run `npm.cmd ci` and `npm.cmd test` inside that
+directory. Model weights, SSH targets, API configuration, and node bindings stay
+in ignored local configuration or private user storage; never commit them.
+
+Checkpoint status: unit tests and independent feature/probability parity pass.
+The new classifier bridge still requires activation and fresh live validation;
+the existing native viewer is a pass-through connection. A room-activity model
+does not establish trained body-pose tracking. Adding nodes or moving hardware
+requires revisiting the room model and calibration.
+
 ## 4. Hardware
 
 The owner confirmed the board from physical inspection and photos. A read-only

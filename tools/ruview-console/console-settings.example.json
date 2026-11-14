@@ -1,0 +1,6 @@
+{
+  "sshTarget": "YOUR_USER@YOUR_PI_HOST",
+  "envPath": "/PATH/TO/PI/DEPLOYMENT/.env",
+  "modelPath": "C:/PATH/TO/EXPORTED/adaptive-model.local.json",
+  "modelNodeId": null
+}
