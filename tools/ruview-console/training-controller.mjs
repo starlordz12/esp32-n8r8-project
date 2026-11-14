@@ -37,7 +37,7 @@ export function createTrainingController({modelPath,nodeId,getModel,setModel,rea
     return status();
   }
   return {status,start,
-    mode(mode){if(capture || !['calibrated_presence_only','calibrated_presence_learned_motion'].includes(mode)) throw new Error('Select a supported mode after capture finishes');
+    mode(mode){if(capture || !['calibrated_presence_only','calibrated_presence_learned_motion','temporal_channel_shape','temporal_motion_only'].includes(mode)) throw new Error('Select a supported mode after capture finishes');
       const raw={...getModel(),inference_mode:mode};delete raw.id;
       const text=JSON.stringify(raw,null,2),next=loadActivityModel(text);
       copyFileSync(modelPath,modelPath+'.backup-'+Date.now()+'.local.json');

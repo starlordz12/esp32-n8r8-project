@@ -182,15 +182,18 @@ a trained room-activity classifier. Its setup and validation steps are in
 directory. Model weights, SSH targets, API configuration, and node bindings stay
 in ignored local configuration or private user storage; never commit them.
 
-The classifier bridge has been activated locally and checked over HTTP and
-WebSocket. Its native Training tab shows the loaded activity model, baseline
-controls, private labeled captures, candidate training/activation, and room
-validation checks. Sensing room and node labels follow the selected inference
-mode. The local installation uses calibrated presence-only mode; learned motion
-remains experimental after independent seated validation failed. Fresh known-condition room trials are still required to establish
-accuracy. A room-activity model
-does not establish trained body-pose tracking. Adding nodes or moving hardware
-requires revisiting the room model and calibration.
+The bridge supports a version-3 temporal CSI motion detector and separate legacy
+presence/softmax paths. The local default measures movement/no movement from
+changes over time and reports occupancy unknown. Stationary occupancy remains
+experimental. Training exposes mode selection, temporal measurements, legacy
+model training, calibration faults, and independent room checks. Additional
+radios must be independently verified and must not inherit another radio's model.
+
+Source filtering and encrypted backup/provisioning tools are documented in
+`tools/radio-source/README.md`. Firmware remains pinned. Radio or placement
+changes require revisiting references and validation. Calibration evidence with
+a sequence fault must not be used even if the server still labels it fresh.
+
 
 ## 4. Hardware
 

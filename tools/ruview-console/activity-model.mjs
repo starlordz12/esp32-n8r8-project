@@ -58,7 +58,7 @@ export function predictActivity(model, vector) {
     probabilities: Object.fromEntries(model.class_names.map((c, i) => [c, probabilities[i]])) };
 }
 
-export function applyActivityModel(frame, model, nodeId) {
+export function applyActivityModel(frame, model, nodeId, baselineHealth = null) {
   if (frame?.type !== 'sensing_update') return frame;
   const unavailable = reason => ({ ...frame, local_activity: { status: 'unavailable', reason, model_id: model.id } });
   if (frame.source !== 'esp32' || (Number.isFinite(frame.age_ms) && frame.age_ms > 5000)) return unavailable('source_not_live');
@@ -72,6 +72,12 @@ export function applyActivityModel(frame, model, nodeId) {
   const learnedPrediction = prediction;
   const evidence = frame.calibrated_presence_evidence;
   const calibrated = evidence?.schema === 'ruview.calibration.calibrated-presence-evidence.v2' &&
+    ['model_id','session_id','boot_epoch','binding_digest'].every(key => typeof evidence[key] === 'string' && evidence[key].length > 0) &&
+    Number.isFinite(baselineHealth?.checked_at_ms) && Date.now() - baselineHealth.checked_at_ms < 5000 &&
+    baselineHealth?.status === 'fresh' && baselineHealth.grid_binding?.status === 'active' &&
+    Array.isArray(baselineHealth.sequence_fault_node_ids) && baselineHealth.sequence_fault_node_ids.length === 0 &&
+    baselineHealth.model_id === evidence.model_id && baselineHealth.session_id === evidence.session_id &&
+    baselineHealth.boot_epoch === evidence.boot_epoch && baselineHealth.binding_digest === evidence.binding_digest &&
     evidence.inference_node_id === nodeId && evidence.source_tick === frame.tick &&
     Array.isArray(evidence.source_node_ids) && evidence.source_node_ids.length === 1 && evidence.source_node_ids[0] === nodeId &&
     typeof evidence.presence === 'boolean' && Number.isFinite(evidence.observed_at_unix_ms) &&

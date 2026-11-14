@@ -1,97 +1,76 @@
 # Local RuView activity console
 
-This localhost bridge opens the native RuView sensing UI using an existing SSH
-connection. The Pi API token is read into memory over SSH and stays server-side.
-It can apply a separately exported, trained version-2 adaptive activity model to
-live CSI frames. It provides presence and motion classification, not body pose.
+A loopback HTTP/WebSocket bridge for the native RuView UI. The existing Pi API
+token is read over SSH into memory and never returned to the browser. Firmware
+and Pi services are independently managed; starting this console does not restart
+the Pi or flash a radio.
 
-## Web UI
+## Inference modes
 
-With a configured activity model, the native Training tab provides room setup,
-empty-room baseline controls, and independent activity checks. The model card
-shows trained/loaded state separately from live prediction availability, the
-training frame count, classes, and the explicit radio binding. Model confidence
-is never labeled as validation accuracy. The activity workflow replaces the
-unrelated RVF pose-training panels for this installation.
+- **Temporal CSI motion only:** the current local default. A two-second window
+  measures normalized channel-shape changes over a half-second lag. It reports
+  movement/no movement with occupancy unknown. It does not infer people counts,
+  body pose, heart rate, or breathing. Those unvalidated fields are suppressed;
+  upstream values remain separately available for diagnosis.
+- **Experimental temporal occupancy:** compares stationary channel shapes with
+  recorded references. This mode can fail after an entry/exit cycle even when
+  its capture holdout passes. It is not the default.
+- **Calibrated presence / experimental v2 learned motion:** legacy paths. A fresh
+  calibration-status snapshot, matching model/session/boot/room binding, active
+  grid, and zero sequence faults are required before using calibrated evidence.
+  The server's status string alone is insufficient. Node resets can invalidate
+  the baseline while the server still calls it fresh.
 
-The Sensing room and node cards use the same trained classification over HTTP
-and WebSocket; upstream values remain in separate provenance fields. A local
-network-only service worker prevents upstream offline caches replaying old UI
-or sensing responses. Existing browsers may need two reloads on first upgrade:
-one to install the worker, then one to load the fresh page.
+The temporal path keeps raw spatial power separate from temporal movement. It
+normalizes gain, conservatively excludes the first two complex samples because
+this wire format lacks the S3 invalid-first-word flag, rejects changed grids and
+stale/incomplete data, and warms a new window after interruptions. Duplicate
+HTTP/WS ticks do not advance a window. Identical samples on distinct single-node
+ticks remain valid stationary data. Additional nodes are marked untrained; the
+trained link is not silently applied to them.
 
-Baseline capture requires explicit replacement/empty-room confirmation, provides
-20 seconds to leave, and finalizes only when the server's required duration and
-frame count are reached without sequence faults. Keep the page open through
-capture. Cancel applies only to the capture started by that panel. The existing
-room binding is reused; baseline persistence across Pi restart is not configured.
-Recalibrating the baseline does not retrain the exported activity classifier.
+A version-3 temporal reference is loaded from `RUVIEW_TEMPORAL_MODEL`, or from
+`<configured-model-path>.temporal.local.json`. It remains separate from the
+version-2 exported model. References and all captures stay private. Recorded
+capture holdout is distinct from independent live validation. Motion-only checks
+do not establish static occupancy accuracy or general person detection.
 
-Activity checks sample unique live frame ticks for 20 seconds after a preparation
-countdown and compare predictions with the selected known condition. Results
-are transient and establish only that trial's match rate. Empty, seated, and
-walking trials must be performed by the room operator before claiming accuracy.
+## Web UI and setup
 
-## Why the bridge applies the model
+Requires Node.js 22.13+, the existing SSH key, private deployment settings, and
+model files. Run `npm.cmd ci` and `npm.cmd test` in this directory. Copy the example
+settings to ignored `console-settings.local.json`; keep SSH targets, model paths,
+radio bindings, API configuration and network details outside Git. Start
+`Open-NativeRuView.ps1` to open the native Sensing page.
 
-The inspected server revision computes the adaptive classification after
-`smooth_and_classify_node`, but does not copy the adaptive label back into the
-node state used by room fusion. A trained-model status flag therefore does not
-prove the published room label comes from that model. This bridge evaluates the
-exported learned weights itself. Original classifications are retained as
-`upstream_classification`, `upstream_room_inference`, and
-`upstream_node_inference`; `local_activity` identifies the trained result.
+Training shows loaded state, selected mode, the live temporal measurement and
+threshold, calibration faults, and independent room checks. Legacy v2 softmax
+captures/training/activation remain explicitly experimental. Activation backs
+up the previous model and atomically replaces its file. It is not evidence that
+motion or presence works. Changes to source filtering, placement, or radio
+hardware require new references and validation.
 
-The web UI can capture labeled examples privately, fit a regularized softmax
-candidate with a temporal capture holdout, and activate it with a backup of the
-previous model. The display-mode selector separates calibrated presence-only operation from
-experimental learned motion. The local installation uses presence-only mode
-after motion failed independent seated validation. Experimental combined mode
-uses fresh calibrated presence to distinguish empty from occupied, then learned
-conditional probabilities for still versus moving. Candidate activation retains
-presence-only mode when that mode is already selected.
-The raw three-class result is retained as `learned_prediction`. Calibration must
-match the live tick, trained radio, schema, and freshness limit; otherwise this
-mode abstains. Calibrated presence decisions have no invented confidence percentage. Presence
-itself can still make errors; this is not a validated person counter or safety
-system. Motion capture holdout scores must not be substituted for new room trials. Capture
-holdout performance does not establish independent room accuracy.
+The upstream adaptive result is not consistently copied into the state used by
+room fusion in the inspected server revision. Original values remain under
+`upstream_classification`, `upstream_room_inference`, and node provenance fields.
+Unavailable local decisions display unavailable rather than reusing a heuristic
+label as though it were a local model prediction.
 
-The feature contract is seven per-node measurements plus eight statistics over
-the first 56 amplitudes. Only model version 2 is accepted. Predictions abstain on
-stale/simulated data, missing features, a different bound node, or multiple nodes.
-Models must be retrained/rebound when the hardware arrangement changes.
+The local network-only service worker prevents old offline HTML/modules/API
+responses being replayed. Existing browsers may need two reloads on first
+upgrade. Host/Origin checks and an explicit path allowlist reject cross-origin
+access and unrelated mutations; API tokens stay server-side.
 
-## Setup
+## Calibration and validation
 
-Requires Node.js 22.13+, SSH key access to the Pi, its existing API configuration,
-and an exported trained `adaptive_model.json`. Keep model files and all network
-configuration outside Git.
+The Pi empty-room capture has its own identity and duration/frame requirements.
+The UI offers explicit replacement confirmation, a 20-second departure delay,
+progress, finalization only after both targets, and cancellation of its own
+capture. Keep that page open through capture. Pi baseline persistence across
+server restart remains unresolved. A local temporal reference is a separate
+measurement model and does not grant calibration authority to vitals or pose.
 
-```powershell
-npm.cmd ci
-npm.cmd test
-```
-
-Copy `console-settings.example.json` to the ignored
-`console-settings.local.json` and fill in the deployment paths, model path, and
-trained node binding. `Open-NativeRuView.ps1` opens a loopback SSH tunnel and then
-the native Sensing page through the bridge. It does not change Pi services.
-
-The bridge serves only on loopback, checks Host/Origin, rejects cross-site
-requests and unrelated mutations, and forwards only sensing WebSocket paths.
-The browser's banner labels the local activity model. A body-pose model, person
-count, or vital-sign accuracy is not established by this classifier.
-
-## Validation before activation
-
-Check HTTP and WebSocket predictions on separate empty, seated, and walking
-samples. Training-set accuracy is not independent validation. Verify that source
-data is live ESP32, that the local model banner reflects availability, and that
-upstream fields remain available. Recheck cross-origin and write restrictions.
-
-Training feature samples are saved beside the configured model as a private
-`*.samples.local.json` file and reused only for the same bound radio within one
-hour. Candidate activation and mode changes back up the previous model before
-an atomic file replacement. No Pi restart, sudo export, or upstream model write
-is needed for local training. The upstream model remains independently managed.
+Run new known-condition checks after changing the sensing setup. Count unique
+source ticks; report unavailable reads separately. Keep deployment-specific
+measurements and model files outside Git. Neither training accuracy nor a
+same-capture temporal holdout substitutes for an independent live test.

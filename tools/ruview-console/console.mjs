@@ -2,10 +2,11 @@
 // The existing server token is read over SSH into memory, never sent to the browser.
 import http from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
 import { loadActivityModel, applyActivityModel } from './activity-model.mjs';
 import { createTrainingController } from './training-controller.mjs';
+import { loadTemporal, createTemporalDetector, applyTemporalDecision } from './temporal-model.mjs';
 
 const port = 8092;
 const host = `127.0.0.1:${port}`;
@@ -18,11 +19,24 @@ if (model && (!Number.isInteger(modelNodeId) || modelNodeId < 0 || modelNodeId >
 }
 let lastActivity = null;
 let lastActivityAt = 0;
+let baselineHealth = null;
+const temporalPath = process.env.RUVIEW_TEMPORAL_MODEL || `${process.env.RUVIEW_ACTIVITY_MODEL}.temporal.local.json`;
+const temporalModel = existsSync(temporalPath) ? loadTemporal(readFileSync(temporalPath, 'utf8')) : null;
+if (temporalModel && temporalModel.node_id !== modelNodeId) throw new Error('Temporal model radio binding mismatch');
+const temporalDetector = temporalModel ? createTemporalDetector(temporalModel) : null;
+const motionDetector = temporalModel ? createTemporalDetector(temporalModel, { motionOnly: true }) : null;
+let lastTemporal = null;
+let lastMotion = null;
 function transform(frame) {
   if (!model) return frame;
   let output;
-  try { output = applyActivityModel(frame, model, modelNodeId); }
+  if (temporalDetector) { const value = temporalDetector(frame); if (value) lastTemporal = value; }
+  if (motionDetector) { const value = motionDetector(frame); if (value) lastMotion = value; }
+  try { output = applyActivityModel(frame, model, modelNodeId, baselineHealth); }
   catch { output = { ...frame, local_activity: { status: 'unavailable', reason: 'invalid_features' } }; }
+  if (model.inference_mode === 'temporal_channel_shape') output = applyTemporalDecision(frame, lastTemporal, modelNodeId);
+  else if (model.inference_mode === 'temporal_motion_only') output = applyTemporalDecision(frame, lastMotion, modelNodeId);
+  else if (output.local_activity?.status === 'unavailable') output = applyTemporalDecision(frame, output.local_activity, modelNodeId);
   if (output.local_activity) { lastActivity = output.local_activity; lastActivityAt = Date.now(); }
   return output;
 }
@@ -30,7 +44,7 @@ const badge = `<aside id="local-activity-badge" role="status" style="position:st
 <script type="importmap">{"imports":{"/ui/components/TrainingPanel.js":"/ui/components/TrainingPanel.js?activity=2","/ui/components/ModelPanel.js":"/ui/components/ModelPanel.js?activity=2"}}</script>
 <script type="module">
 const badge=document.getElementById('local-activity-badge');
-async function update(){try{const r=await fetch('/local/activity/status');const s=await r.json();badge.textContent=s.status==='live'?(s.inference_method==='calibrated_presence_only'?'Calibrated room presence - ':'Calibrated presence + learned motion - ')+s.label.replaceAll('_',' ')+(s.confidence==null?' - calibrated presence':' - '+Math.round(s.confidence*100)+'% learned motion confidence'):'Local room activity model · '+(s.reason||s.status);badge.style.background=s.status==='live'?'#12352c':'#614515';}catch{badge.textContent='Local room activity model · Connection unavailable';badge.style.background='#614515';}}
+async function update(){try{const r=await fetch('/local/activity/status');const s=await r.json();badge.textContent=s.status==='live'?(s.inference_method==='normalized_channel_motion_v1'?'Temporal CSI motion - ':s.inference_method==='normalized_channel_shape_temporal_v1'?'Temporal CSI room activity - ':s.inference_method==='calibrated_presence_only'?'Calibrated room presence - ':'Calibrated presence + learned motion - ')+s.label.replaceAll('_',' ')+(s.confidence==null?(s.inference_method==='normalized_channel_motion_v1'?' - occupancy unknown':s.inference_method==='normalized_channel_shape_temporal_v1'?' - measured channel change':' - calibrated presence'):' - '+Math.round(s.confidence*100)+'% learned motion confidence'):'Local room activity model · '+(s.reason||s.status);badge.style.background=s.status==='live'?'#12352c':'#614515';}catch{badge.textContent='Local room activity model · Connection unavailable';badge.style.background='#614515';}}
 update();setInterval(update,1000);
 </script>`;
 let token;
@@ -52,6 +66,29 @@ async function readFrame() {
   if (!response.ok) throw new Error('Live sensing unavailable');
   return response.json();
 }
+async function refreshBaselineHealth() {
+  try {
+    const response = await fetch('http://127.0.0.1:3000/api/v1/calibration/status', {
+      headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(2500),
+    });
+    if (!response.ok) throw new Error();
+    baselineHealth = { ...await response.json(), checked_at_ms: Date.now() };
+  } catch { baselineHealth = null; }
+}
+await refreshBaselineHealth();
+setInterval(refreshBaselineHealth, 2000);
+// Keep a real stream for temporal windows even when Training is the only open tab.
+// Browser sockets and HTTP reads share the detector, which ignores duplicate ticks.
+function connectSensingFeed() {
+  const feed = new WebSocket('ws://127.0.0.1:3000/ws/sensing', {
+    headers: { authorization: `Bearer ${token}`, origin: 'http://127.0.0.1:3000' },
+    maxPayload: 8 * 1024 * 1024,
+  });
+  feed.on('message', data => { try { transform(JSON.parse(data.toString())); } catch {} });
+  feed.on('error', () => {});
+  feed.on('close', () => setTimeout(connectSensingFeed, 1000));
+}
+if (temporalDetector) connectSensingFeed();
 const training = model ? createTrainingController({ modelPath: process.env.RUVIEW_ACTIVITY_MODEL,
   nodeId: modelNodeId, getModel: () => model,
   setModel: value => { model = value; lastActivity = null; lastActivityAt = 0; }, readFrame }) : null;
@@ -88,6 +125,7 @@ const server = http.createServer(async (req, res) => {
     try {
       let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 1024) throw new Error('Request too large'); }
       const input = body ? JSON.parse(body) : {};
+      if (path.endsWith('/mode') && ['temporal_channel_shape','temporal_motion_only'].includes(input.mode) && !temporalModel) throw new Error('No temporal model is loaded');
       const result = path.endsWith('/capture') ? await training.start(input.label, input.confirmed) :
         path.endsWith('/cancel') ? training.cancel() : path.endsWith('/train') ? training.train() :
         path.endsWith('/activate') ? training.activate(input.candidate_id) :
@@ -113,10 +151,14 @@ const server = http.createServer(async (req, res) => {
     const activity = lastActivityAt && Date.now() - lastActivityAt < 5000
       ? lastActivity : { status: 'unavailable', reason: 'awaiting_fresh_frame' };
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ model_loaded: !!model,
-      training: model ? { status: 'trained', version: model.version,
-        trained_frames: model.trained_frames, classes: model.class_names,
-        node_id: modelNodeId, model_id: model.id, inference_mode: model.inference_mode || 'learned_three_class', validation: 'pending_room_trials' } : null,
+    const selected = ['temporal_channel_shape','temporal_motion_only'].includes(model?.inference_mode) ? temporalModel : model;
+    res.end(JSON.stringify({ model_loaded: !!selected,
+      temporal_model: temporalModel ? { loaded: true, capture_holdout: temporalModel.capture_holdout } : null,
+      temporal_activity: lastTemporal,
+      temporal_motion: lastMotion,
+      training: selected ? { status: 'trained', version: selected.version,
+        trained_frames: selected.trained_frames, classes: model.inference_mode === 'temporal_motion_only' ? ['no_movement','movement_detected'] : ['absent','present_still','present_moving'],
+        node_id: modelNodeId, model_id: selected.id, inference_mode: model.inference_mode || 'learned_three_class', validation: 'pending_room_trials' } : null,
       ...activity }));
     return;
   }
@@ -137,7 +179,7 @@ const server = http.createServer(async (req, res) => {
         reply.on('end', () => {
           try {
             const output = path === '/api/v1/sensing/latest' ? JSON.stringify(transform(JSON.parse(body)))
-              : path === '/ui/components/SensingTab.js' ? body.replace("confPct + '%'", "c.confidence == null ? 'Calibrated presence' : confPct + '%'").replace("motion + ' ' + conf + '%'", "nf.classification?.confidence == null ? motion + ' - Calibrated' : motion + ' ' + conf + '%'")
+              : path === '/ui/components/SensingTab.js' ? body.replace("confPct + '%'", "c.confidence == null ? (data.local_activity?.status !== 'live' ? 'Unavailable' : ['normalized_channel_shape_temporal_v1','normalized_channel_motion_v1'].includes(data.local_activity?.inference_method) ? 'Temporal CSI' : 'Calibrated presence') : confPct + '%'").replace("motion + ' ' + conf + '%'", "nf.classification?.confidence == null ? motion + (['normalized_channel_shape_temporal_v1','normalized_channel_motion_v1'].includes(nf.classification?.inference_method) ? ' - Temporal CSI' : '') : motion + ' ' + conf + '%'")
               : body.replace(/<body([^>]*)>/i, `<body$1>${badge}`)
                 .replace('Record CSI data, train pose estimation models, and manage .rvf files',
                   'Trained room activity, live predictions, empty-room baseline, and accuracy checks')
