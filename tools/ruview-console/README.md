@@ -5,13 +5,32 @@ connection. The Pi API token is read into memory over SSH and stays server-side.
 It can apply a separately exported, trained version-2 adaptive activity model to
 live CSI frames. It provides presence and motion classification, not body pose.
 
-## Status at checkpoint
+## Web UI
 
-Five unit/regression tests pass. Feature extraction and learned softmax output
-were checked against an independent calculation on a live frame. The new bridge
-has **not yet been activated or validated in the user-facing console**. The
-running viewer remains the earlier native pass-through bridge. Resume with local
-installation, fresh live validation, and browser verification before merge.
+With a configured activity model, the native Training tab provides room setup,
+empty-room baseline controls, and independent activity checks. The model card
+shows trained/loaded state separately from live prediction availability, the
+training frame count, classes, and the explicit radio binding. Model confidence
+is never labeled as validation accuracy. The activity workflow replaces the
+unrelated RVF pose-training panels for this installation.
+
+The Sensing room and node cards use the same trained classification over HTTP
+and WebSocket; upstream values remain in separate provenance fields. A local
+network-only service worker prevents upstream offline caches replaying old UI
+or sensing responses. Existing browsers may need two reloads on first upgrade:
+one to install the worker, then one to load the fresh page.
+
+Baseline capture requires explicit replacement/empty-room confirmation, provides
+20 seconds to leave, and finalizes only when the server's required duration and
+frame count are reached without sequence faults. Keep the page open through
+capture. Cancel applies only to the capture started by that panel. The existing
+room binding is reused; baseline persistence across Pi restart is not configured.
+Recalibrating the baseline does not retrain the exported activity classifier.
+
+Activity checks sample unique live frame ticks for 20 seconds after a preparation
+countdown and compare predictions with the selected known condition. Results
+are transient and establish only that trial's match rate. Empty, seated, and
+walking trials must be performed by the room operator before claiming accuracy.
 
 ## Why the bridge applies the model
 

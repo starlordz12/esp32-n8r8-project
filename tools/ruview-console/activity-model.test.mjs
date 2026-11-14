@@ -42,6 +42,8 @@ test('real model prediction replaces stale heuristic label while retaining prove
   assert.equal(output.classification.presence, false);
   assert.equal(output.nodes[0].node_inference.classification, 'absent');
   assert.equal(output.local_activity.status, 'live');
+  assert.equal(output.node_features[0].classification.motion_level, 'absent');
+  assert.equal(output.node_features[0].classification.confidence, output.classification.confidence);
   assert.equal(output.upstream_classification.motion_level, 'present_moving');
   assert.equal(input.classification.motion_level, 'present_moving');
   assert.equal(output.source, 'esp32');

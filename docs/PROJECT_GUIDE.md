@@ -182,9 +182,11 @@ a trained room-activity classifier. Its setup and validation steps are in
 directory. Model weights, SSH targets, API configuration, and node bindings stay
 in ignored local configuration or private user storage; never commit them.
 
-Checkpoint status: unit tests and independent feature/probability parity pass.
-The new classifier bridge still requires activation and fresh live validation;
-the existing native viewer is a pass-through connection. A room-activity model
+The classifier bridge has been activated locally and checked over HTTP and
+WebSocket. Its native Training tab shows the loaded activity model, baseline
+controls, and room-validation checks; Sensing uses the trained room and node
+labels. Fresh known-condition room trials are still required to establish
+accuracy. A room-activity model
 does not establish trained body-pose tracking. Adding nodes or moving hardware
 requires revisiting the room model and calibration.
 

@@ -76,6 +76,8 @@ export function applyActivityModel(frame, model, nodeId) {
     classification,
     upstream_room_inference: frame.room_inference,
     room_inference: { classification: prediction.label, confidence: prediction.confidence, contributing_nodes: 1 },
+    node_features: frame.node_features.map(n => ({ ...n,
+      upstream_classification: n.classification, classification: { ...classification } })),
     nodes: frame.nodes.map(n => ({ ...n, upstream_node_inference: n.node_inference,
       node_inference: { ...n.node_inference, classification: prediction.label, confidence: prediction.confidence } })),
     local_activity: { status: 'live', model_id: model.id, model_version: model.version,

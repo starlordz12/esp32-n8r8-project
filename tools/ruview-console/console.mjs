@@ -26,6 +26,7 @@ function transform(frame) {
   return output;
 }
 const badge = `<aside id="local-activity-badge" role="status" style="position:sticky;top:0;z-index:9999;padding:10px;background:#12352c;color:#e4fff4;font:14px system-ui">Local trained room activity model · Connecting…</aside>
+<script type="importmap">{"imports":{"/ui/components/TrainingPanel.js":"/ui/components/TrainingPanel.js?activity=2","/ui/components/ModelPanel.js":"/ui/components/ModelPanel.js?activity=2"}}</script>
 <script type="module">
 const badge=document.getElementById('local-activity-badge');
 async function update(){try{const r=await fetch('/local/activity/status');const s=await r.json();badge.textContent=s.status==='live'?'Local trained room activity · '+s.label.replaceAll('_',' ')+' · '+Math.round(s.confidence*100)+'%':'Local room activity model · '+(s.reason||s.status);badge.style.background=s.status==='live'?'#12352c':'#614515';}catch{badge.textContent='Local room activity model · Connection unavailable';badge.style.background='#614515';}}
@@ -44,7 +45,7 @@ try {
   process.exit(1);
 }
 const wsPaths = new Set(['/ws/sensing', '/ws/introspection', '/api/v1/stream/pose']);
-const writePaths = new Set(['/api/v1/calibration/start', '/api/v1/calibration/stop', '/api/v1/pose/calibrate']);
+const writePaths = new Set(['/api/v1/calibration/start', '/api/v1/calibration/stop', '/api/v1/calibration/cancel', '/api/v1/calibration/reset', '/api/v1/pose/calibrate']);
 const readApi = /^\/api\/v1\/(?:info$|status$|metrics$|sensing\/|nodes(?:\/|$)|mesh(?:\/|$)|vital-signs$|edge-vitals$|wasm-events$|model\/|models(?:\/|$)|pose\/|stream\/status$|introspection\/snapshot$|calibration\/status$|adaptive\/status$|rf\/vendors|radar\/latest$|csi\/)/;
 function valid(req) {
   if (req.headers.host !== host) return false;
@@ -53,16 +54,44 @@ function valid(req) {
   return true;
 }
 function headers(req) {
-  return { ...req.headers, host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000',
+  const forwarded = { ...req.headers };
+  delete forwarded['if-none-match'];
+  delete forwarded['if-modified-since'];
+  return { ...forwarded, host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000',
     'accept-encoding': 'identity', authorization: `Bearer ${token}` };
 }
-const server = http.createServer((req, res) => {
+const localModules = {
+    // The upstream offline worker ignores query strings and replays old HTML,
+    // modules and even API responses. This console must always use fresh data.
+    '/ui/sw.js': "self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));",
+    '/ui/components/TrainingPanel.js': "export { TrainingPanel as default } from '/local/activity/panels.js';",
+    '/ui/components/ModelPanel.js': "export { ModelPanel as default } from '/local/activity/panels.js';",
+    '/local/activity/panels.js': readFileSync(new URL('./activity-panels.js', import.meta.url), 'utf8'),
+};
+const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, origin).pathname;
+  if (model && Object.hasOwn(localModules, path) && req.method === 'GET' && valid(req)) {
+    res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' });
+    res.end(localModules[path]); return;
+  }
   if (path === '/local/activity/status' && req.method === 'GET' && valid(req)) {
+    // Training can be open without a sensing socket. Read a real frame so the
+    // model status does not depend on visiting another tab first.
+    try {
+      const latest = await fetch('http://127.0.0.1:3000/api/v1/sensing/latest', {
+        headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(2500),
+      });
+      if (!latest.ok) throw new Error();
+      transform(await latest.json());
+    } catch { lastActivity = { status: 'unavailable', reason: 'upstream_unavailable' }; lastActivityAt = Date.now(); }
     const activity = lastActivityAt && Date.now() - lastActivityAt < 5000
       ? lastActivity : { status: 'unavailable', reason: 'awaiting_fresh_frame' };
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ model_loaded: !!model, ...activity }));
+    res.end(JSON.stringify({ model_loaded: !!model,
+      training: model ? { status: 'trained', version: model.version,
+        trained_frames: model.trained_frames, classes: model.class_names,
+        node_id: modelNodeId, model_id: model.id, validation: 'pending_room_trials' } : null,
+      ...activity }));
     return;
   }
   const read = ['GET', 'HEAD'].includes(req.method) &&
@@ -82,7 +111,10 @@ const server = http.createServer((req, res) => {
         reply.on('end', () => {
           try {
             const output = path === '/api/v1/sensing/latest' ? JSON.stringify(transform(JSON.parse(body)))
-              : body.replace(/<body([^>]*)>/i, `<body$1>${badge}`);
+              : body.replace(/<body([^>]*)>/i, `<body$1>${badge}`)
+                .replace('Record CSI data, train pose estimation models, and manage .rvf files',
+                  'Trained room activity, live predictions, empty-room baseline, and accuracy checks')
+                .replace('src="app.js"', 'src="app.js?activity=2"');
             res.writeHead(200, responseHeaders); res.end(output);
           } catch { res.writeHead(502); res.end('Invalid upstream response.'); }
         });
