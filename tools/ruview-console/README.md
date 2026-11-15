@@ -42,6 +42,9 @@ setting `motionReferencePath` (environment: `RUVIEW_MOTION_REFERENCE`) to a
 per-node motion reference. This overrides only `temporal_motion_only`; the legacy
 model and occupancy modes remain separate. Each radio has its own threshold and
 grid binding. Never copy a reference between radios or placements.
+Set a radio reference's `enabled` field to `false` while repositioning it; it
+remains unavailable until a fresh reference replaces it. Any calibrated presence
+bound to that radio is also withheld during this placement transition.
 
 `capture-motion.mjs stationary|moving PRIVATE_OUTPUT SECONDS` records paired raw
 snapshots and live decisions through the localhost console. Keep captures and

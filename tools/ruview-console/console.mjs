@@ -45,6 +45,8 @@ function transform(frame) {
     const decision=multiMotionDetector(frame);
     if(!decision)return frame;
     decision.calibrated_presence=readCalibratedPresence(frame,baselineHealth,Date.now(),presenceReceipt());
+    if(multiMotionModel.nodes.some(n=>n.enabled===false&&baselineHealth?.source_node_ids?.includes(n.node_id)))
+      decision.calibrated_presence={status:'unavailable',presence:null,reason:'placement_reference_pending'};
     lastActivity=decision;lastActivityAt=Date.now();
     return applyMultiNodeMotion(frame,decision);
   }

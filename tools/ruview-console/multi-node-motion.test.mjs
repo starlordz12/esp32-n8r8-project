@@ -37,3 +37,10 @@ test('sparse windows reject gaps longer than lag and malformed reference binding
   assert.throws(()=>loadMotionReference(JSON.stringify({...model(),nodes:[model().nodes[0],model().nodes[0]]})));
   assert.throws(()=>fitMotionReference({label:'empty'},{label:'moving'},[1,2]));
 });
+test('a radio awaiting placement references cannot publish its old motion threshold',()=>{
+ const reference=model();reference.nodes[0].enabled=false;let now,result;
+ const detect=createMultiNodeMotion(reference,{clock:()=>now});
+ for(let i=0;i<45;i++){const f=frame(i);now=f.timestamp*1000;result=detect(f);}
+ assert.equal(result.nodes[0].reason,'placement_reference_pending');assert.equal(result.status,'unavailable');
+ assert.equal(result.nodes[1].status,'live');
+});

@@ -20,6 +20,7 @@ export function createMultiNodeMotion(model,{clock=()=>Date.now()}={}) {
       const id=reference.node_id,s=states.get(id);
       const unavailable=reason=>({node_id:id,status:'unavailable',reason});
       const reset=reason=>{s.history=[];s.result=null;s.key=null;s.lastTime=-Infinity;return unavailable(reason);};
+      if(reference.enabled===false)return reset('placement_reference_pending');
       const node=frame.nodes?.find(n=>n.node_id===id),feature=frame.node_features?.find(n=>n.node_id===id);
       if(frame.source!=='esp32'||!node||!feature||feature.stale||!Number.isFinite(feature.last_seen_ms)||feature.last_seen_ms>250||
         !Number.isFinite(frame.timestamp)||Math.abs(now/1000-frame.timestamp)>1)return reset('node_not_fresh');
