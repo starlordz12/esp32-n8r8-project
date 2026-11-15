@@ -37,6 +37,29 @@ do not establish static occupancy accuracy or general person detection.
 
 ## Web UI and setup
 
+For separate motion decisions from multiple receivers, set the private launcher
+setting `motionReferencePath` (environment: `RUVIEW_MOTION_REFERENCE`) to a
+per-node motion reference. This overrides only `temporal_motion_only`; the legacy
+model and occupancy modes remain separate. Each radio has its own threshold and
+grid binding. Never copy a reference between radios or placements.
+
+`capture-motion.mjs stationary|moving PRIVATE_OUTPUT SECONDS` records paired raw
+snapshots and live decisions through the localhost console. Keep captures and
+references outside Git. `fitMotionReference` in `motion-reference.mjs` requires
+separate known stationary and moving captures, at least eight complete two-second
+windows for each radio and condition, and no overlap between those windows.
+That separation is a fitting condition, not an accuracy claim. New independent
+trials must report per-node wrong decisions and unavailable time separately.
+
+The sparse motion path requires at least twelve changed raw snapshots spanning
+1.8 seconds of a two-second window, six half-second comparisons, and no gap over
+half a second. It does not invent samples when the upstream stream omits raw
+arrays. Identical arrays cannot prove a fresh per-node raw sample, even if an
+aggregate tick or transport counter advances. Cached decisions expire after
+half a second; grid changes, stale data and simulation invalidate evidence.
+Room movement can be reported from either live radio; room no-movement requires
+live decisions from every configured radio. Missing coverage stays explicit.
+
 Requires Node.js 22.13+, the existing SSH key, private deployment settings, and
 model files. Run `npm.cmd ci` and `npm.cmd test` in this directory. Copy the example
 settings to ignored `console-settings.local.json`; keep SSH targets, model paths,
@@ -62,6 +85,35 @@ upgrade. Host/Origin checks and an explicit path allowlist reject cross-origin
 access and unrelated mutations; API tokens stay server-side.
 
 ## Calibration and validation
+
+Sensing and the local Observatory use the same measured per-radio motion view.
+The former 3D body/signal illustration is replaced by actual motion traces and
+radio-specific thresholds. Unknown presence stays unknown in both views; no
+person silhouettes, room coordinates or counts are invented. Observatory is a
+local console view, not a replacement for an upstream pose model.
+
+`presence-reference.mjs` provides an offline experimental comparison of paired
+empty-room and seated channel shapes. It requires complete windows from every
+bound radio and abstains outside its references. Its output remains experimental
+even on perfectly separated fitting data. Save independent captures separately;
+do not activate a failing comparison or repeatedly refit validation examples.
+This diagnostic does not reset or restore the Pi's stale baseline.
+
+Fresh Pi calibrated-presence evidence is inspected independently of the legacy
+single-node learned classifier. A baseline bound to one radio does not become a
+second radio's presence model. Healthy grid, sequence, freshness and exact
+model/session/boot/binding checks are required. Presence stays experimental until
+new known-empty and seated trials pass. `check-calibrated-presence.mjs` collects
+private verification reports without changing models or the Pi. It counts unique
+bound-link evidence ticks and reports missing/duplicate reads separately.
+
+A private `<modelPath>.calibrated-validation.local.json` receipt (or
+`RUVIEW_PRESENCE_VALIDATION`) can authorize only the exact current baseline after
+both independent conditions last at least twenty seconds with at least twenty
+unique frames, 95% matching decisions and 80% availability. Each report must
+carry the same baseline identity; changed identities, faults and receipts older
+than one day cannot authorize presence. Passing short trials is limited evidence,
+not general accuracy, safety validation or a guarantee after moving hardware.
 
 The Pi empty-room capture has its own identity and duration/frame requirements.
 The UI offers explicit replacement confirmation, a 20-second departure delay,

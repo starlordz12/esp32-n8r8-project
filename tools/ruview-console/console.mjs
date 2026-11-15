@@ -7,6 +7,9 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { loadActivityModel, applyActivityModel } from './activity-model.mjs';
 import { createTrainingController } from './training-controller.mjs';
 import { loadTemporal, createTemporalDetector, applyTemporalDecision } from './temporal-model.mjs';
+import {loadMotionReference,createMultiNodeMotion,applyMultiNodeMotion} from './multi-node-motion.mjs';
+import {allowsUpstreamWrite} from './request-policy.mjs';
+import {readCalibratedPresence} from './calibrated-presence.mjs';
 
 const port = 8092;
 const host = `127.0.0.1:${port}`;
@@ -25,10 +28,26 @@ const temporalModel = existsSync(temporalPath) ? loadTemporal(readFileSync(tempo
 if (temporalModel && temporalModel.node_id !== modelNodeId) throw new Error('Temporal model radio binding mismatch');
 const temporalDetector = temporalModel ? createTemporalDetector(temporalModel) : null;
 const motionDetector = temporalModel ? createTemporalDetector(temporalModel, { motionOnly: true }) : null;
+const multiMotionPath=process.env.RUVIEW_MOTION_REFERENCE;
+const multiMotionModel=multiMotionPath?loadMotionReference(readFileSync(multiMotionPath,'utf8')):null;
+const multiMotionDetector=multiMotionModel?createMultiNodeMotion(multiMotionModel):null;
+const presenceReceiptPath=process.env.RUVIEW_PRESENCE_VALIDATION||`${process.env.RUVIEW_ACTIVITY_MODEL}.calibrated-validation.local.json`;
+let presenceReceiptAt=0,lastPresenceReceipt=null;
+function presenceReceipt(){
+  if(Date.now()-presenceReceiptAt>1000){presenceReceiptAt=Date.now();try{lastPresenceReceipt=JSON.parse(readFileSync(presenceReceiptPath,'utf8'));}catch{lastPresenceReceipt=null;}}
+  return lastPresenceReceipt;
+}
 let lastTemporal = null;
 let lastMotion = null;
 function transform(frame) {
   if (!model) return frame;
+  if(multiMotionDetector && model.inference_mode==='temporal_motion_only') {
+    const decision=multiMotionDetector(frame);
+    if(!decision)return frame;
+    decision.calibrated_presence=readCalibratedPresence(frame,baselineHealth,Date.now(),presenceReceipt());
+    lastActivity=decision;lastActivityAt=Date.now();
+    return applyMultiNodeMotion(frame,decision);
+  }
   let output;
   if (temporalDetector) { const value = temporalDetector(frame); if (value) lastTemporal = value; }
   if (motionDetector) { const value = motionDetector(frame); if (value) lastMotion = value; }
@@ -44,7 +63,17 @@ const badge = `<aside id="local-activity-badge" role="status" style="position:st
 <script type="importmap">{"imports":{"/ui/components/TrainingPanel.js":"/ui/components/TrainingPanel.js?activity=2","/ui/components/ModelPanel.js":"/ui/components/ModelPanel.js?activity=2"}}</script>
 <script type="module">
 const badge=document.getElementById('local-activity-badge');
-async function update(){try{const r=await fetch('/local/activity/status');const s=await r.json();badge.textContent=s.status==='live'?(s.inference_method==='normalized_channel_motion_v1'?'Temporal CSI motion - ':s.inference_method==='normalized_channel_shape_temporal_v1'?'Temporal CSI room activity - ':s.inference_method==='calibrated_presence_only'?'Calibrated room presence - ':'Calibrated presence + learned motion - ')+s.label.replaceAll('_',' ')+(s.confidence==null?(s.inference_method==='normalized_channel_motion_v1'?' - occupancy unknown':s.inference_method==='normalized_channel_shape_temporal_v1'?' - measured channel change':' - calibrated presence'):' - '+Math.round(s.confidence*100)+'% learned motion confidence'):'Local room activity model · '+(s.reason||s.status);badge.style.background=s.status==='live'?'#12352c':'#614515';}catch{badge.textContent='Local room activity model · Connection unavailable';badge.style.background='#614515';}}
+async function update(){try{
+  const r=await fetch('/local/activity/status');const s=await r.json();
+  if(s.multi_node_motion){
+    const label=s.status==='live'?s.label.replaceAll('_',' '):'unavailable';
+    badge.textContent='Two-node CSI motion: '+label+' | '+(s.nodes||[]).map(n=>'Node '+n.node_id+': '+(n.status==='live'?n.label.replaceAll('_',' '):'unavailable')).join(' | ')+(s.calibrated_presence?.status==='live'?' | Calibrated presence: '+(s.calibrated_presence.presence?'present':'empty'):' | Occupancy unknown · validation pending');
+  }else{
+    const motion=s.inference_method==='normalized_channel_motion_v1';
+    badge.textContent=s.status==='live'?(motion?'Temporal CSI motion: ':'Local room activity: ')+s.label.replaceAll('_',' ')+(motion?' · Occupancy unknown':''):'Local activity unavailable: '+(s.reason||s.status);
+  }
+  badge.style.background=s.status==='live'?'#12352c':'#614515';
+}catch{badge.textContent='Local room activity connection unavailable';}}
 update();setInterval(update,1000);
 </script>`;
 let token;
@@ -88,12 +117,11 @@ function connectSensingFeed() {
   feed.on('error', () => {});
   feed.on('close', () => setTimeout(connectSensingFeed, 1000));
 }
-if (temporalDetector) connectSensingFeed();
+if (temporalDetector || multiMotionDetector) connectSensingFeed();
 const training = model ? createTrainingController({ modelPath: process.env.RUVIEW_ACTIVITY_MODEL,
   nodeId: modelNodeId, getModel: () => model,
   setModel: value => { model = value; lastActivity = null; lastActivityAt = 0; }, readFrame }) : null;
 const wsPaths = new Set(['/ws/sensing', '/ws/introspection', '/api/v1/stream/pose']);
-const writePaths = new Set(['/api/v1/calibration/start', '/api/v1/calibration/stop', '/api/v1/calibration/cancel', '/api/v1/calibration/reset', '/api/v1/pose/calibrate']);
 const readApi = /^\/api\/v1\/(?:info$|status$|metrics$|sensing\/|nodes(?:\/|$)|mesh(?:\/|$)|vital-signs$|edge-vitals$|wasm-events$|model\/|models(?:\/|$)|pose\/|stream\/status$|introspection\/snapshot$|calibration\/status$|adaptive\/status$|rf\/vendors|radar\/latest$|csi\/)/;
 function valid(req) {
   if (req.headers.host !== host) return false;
@@ -115,9 +143,15 @@ const localModules = {
     '/ui/components/TrainingPanel.js': "export { TrainingPanel as default } from '/local/activity/panels.js';",
     '/ui/components/ModelPanel.js': "export { ModelPanel as default } from '/local/activity/panels.js';",
     '/local/activity/panels.js': readFileSync(new URL('./activity-panels.js', import.meta.url), 'utf8'),
+    '/local/activity/motion-view.js': readFileSync(new URL('./motion-view.js', import.meta.url), 'utf8'),
+    '/ui/components/gaussian-splats.js': readFileSync(new URL('./motion-view.js', import.meta.url), 'utf8'),
 };
 const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, origin).pathname;
+  if(model && path==='/ui/observatory.html' && req.method==='GET' && valid(req)){
+    res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
+    res.end(readFileSync(new URL('./observatory.html',import.meta.url),'utf8'));return;
+  }
   const actions = new Set(['/local/activity/training/capture', '/local/activity/training/cancel',
     '/local/activity/training/train', '/local/activity/training/activate', '/local/activity/training/mode']);
   if (training && valid(req) && (path === '/local/activity/training' && req.method === 'GET' ||
@@ -156,7 +190,8 @@ const server = http.createServer(async (req, res) => {
       temporal_model: temporalModel ? { loaded: true, capture_holdout: temporalModel.capture_holdout } : null,
       temporal_activity: lastTemporal,
       temporal_motion: lastMotion,
-      training: selected ? { status: 'trained', version: selected.version,
+      multi_node_motion:multiMotionModel?{loaded:true,node_ids:multiMotionModel.nodes.map(n=>n.node_id),validation:multiMotionModel.validation}:null,
+      training: multiMotionModel && model?.inference_mode==='temporal_motion_only' ? {        status:'trained',version:1,model_id:multiMotionModel.id,node_ids:multiMotionModel.nodes.map(n=>n.node_id),        classes:['no_movement','movement_detected'],inference_mode:'temporal_motion_only',validation:multiMotionModel.validation,        trained_frames:multiMotionModel.nodes.reduce((s,n)=>s+n.trained_frames,0),      } : selected ? { status: 'trained', version: selected.version,
         trained_frames: selected.trained_frames, classes: model.inference_mode === 'temporal_motion_only' ? ['no_movement','movement_detected'] : ['absent','present_still','present_moving'],
         node_id: modelNodeId, model_id: selected.id, inference_mode: model.inference_mode || 'learned_three_class', validation: 'pending_room_trials' } : null,
       ...activity }));
@@ -164,7 +199,7 @@ const server = http.createServer(async (req, res) => {
   }
   const read = ['GET', 'HEAD'].includes(req.method) &&
     (path === '/' || path === '/ui' || path.startsWith('/ui/') || path.startsWith('/health') || path === '/oauth/status' || readApi.test(path));
-  const write = req.method === 'POST' && req.headers.origin === origin && writePaths.has(path);
+  const write = allowsUpstreamWrite(req.method,path,req.headers.origin,origin);
   if (!valid(req) || !(read || write)) { res.writeHead(403); res.end('Local viewer request not permitted.'); return; }
   const upstream = http.request({ hostname: '127.0.0.1', port: 3000, path: req.url,
     method: req.method, headers: headers(req) }, reply => {
@@ -179,7 +214,7 @@ const server = http.createServer(async (req, res) => {
         reply.on('end', () => {
           try {
             const output = path === '/api/v1/sensing/latest' ? JSON.stringify(transform(JSON.parse(body)))
-              : path === '/ui/components/SensingTab.js' ? body.replace("confPct + '%'", "c.confidence == null ? (data.local_activity?.status !== 'live' ? 'Unavailable' : ['normalized_channel_shape_temporal_v1','normalized_channel_motion_v1'].includes(data.local_activity?.inference_method) ? 'Temporal CSI' : 'Calibrated presence') : confPct + '%'").replace("motion + ' ' + conf + '%'", "nf.classification?.confidence == null ? motion + (['normalized_channel_shape_temporal_v1','normalized_channel_motion_v1'].includes(nf.classification?.inference_method) ? ' - Temporal CSI' : '') : motion + ' ' + conf + '%'")
+              : path === '/ui/components/SensingTab.js' ? body.replace('await this._loadThree();','').replace('<label>Motion Band</label>','<label>Spatial packet power</label>').replace('<label>Breathing Band</label>','<label>Low-frequency power</label>').replace(/With <strong><span id="sensingNodeCount">0<\/span> ESP32 node\(s\)<\/strong>[\s\S]*?limb-level tracking\./, 'Connected radios: <strong><span id="sensingNodeCount">0</span></strong>. Local CSI detects channel movement only. Occupancy is unknown. The graphic shows measured motion over time.').replace("confPct + '%'", "c.confidence == null ? (data.local_activity?.status !== 'live' ? 'Unavailable' : ['normalized_channel_shape_temporal_v1','normalized_channel_motion_v1','normalized_channel_motion_sparse_v1'].includes(data.local_activity?.inference_method) ? 'Temporal CSI' : 'Calibrated presence') : confPct + '%'").replace("motion + ' ' + conf + '%'", "nf.classification?.confidence == null ? motion + (['normalized_channel_shape_temporal_v1','normalized_channel_motion_v1','normalized_channel_motion_sparse_v1'].includes(nf.classification?.inference_method) ? ' - Temporal CSI' : '') : motion + ' ' + conf + '%'")
               : body.replace(/<body([^>]*)>/i, `<body$1>${badge}`)
                 .replace('Record CSI data, train pose estimation models, and manage .rvf files',
                   'Trained room activity, live predictions, empty-room baseline, and accuracy checks')

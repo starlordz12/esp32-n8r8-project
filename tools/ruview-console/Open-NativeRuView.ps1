@@ -19,6 +19,9 @@ if(-not (Test-RuViewListener 3000)) {
 if(-not (Test-RuViewListener 8092)) {
     $env:RUVIEW_PI_SSH=$settings.sshTarget
     $env:RUVIEW_PI_ENV=$settings.envPath
+    if($settings.PSObject.Properties.Name -contains 'motionReferencePath'){
+        $env:RUVIEW_MOTION_REFERENCE=$settings.motionReferencePath
+    }
     if($settings.PSObject.Properties.Name -contains 'modelPath'){
         $env:RUVIEW_ACTIVITY_MODEL=$settings.modelPath
         $env:RUVIEW_MODEL_NODE_ID=[string]$settings.modelNodeId
