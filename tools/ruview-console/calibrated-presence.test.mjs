@@ -6,6 +6,7 @@ test('bound calibrated evidence can be inspected with two streaming radios but r
  const frame={source:'esp32',timestamp:now/1000,tick:10,nodes:[{node_id:1},{node_id:2}],node_features:[{node_id:1,stale:false,last_seen_ms:0}],
  calibrated_presence_evidence:{...identity,schema:'ruview.calibration.calibrated-presence-evidence.v2',inference_node_id:1,source_tick:10,observed_at_unix_ms:now,presence:true}};
  assert.equal(readCalibratedPresence(frame,health,now).status,'experimental');
+ assert.equal(readCalibratedPresence(frame,health,now,{...identity,node_id:1,kind:'calibrated_presence_failed_trials'}).reason,'failed_independent_presence_trials');
  for(const bad of [{...health,status:'stale'},{...health,sequence_fault_node_ids:[1]},{...health,checked_at_ms:now-6000},{...health,model_id:'other'},{...health,source_node_ids:[2]}])assert.equal(readCalibratedPresence(frame,bad,now).presence,null);
  assert.equal(readCalibratedPresence({...frame,source:'simulated'},health,now).presence,null);
  assert.equal(readCalibratedPresence({...frame,tick:11},health,now).presence,null);

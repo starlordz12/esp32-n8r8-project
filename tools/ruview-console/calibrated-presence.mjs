@@ -6,6 +6,9 @@ export function readCalibratedPresence(frame,health,now=Date.now(),receipt=null)
   if(!Number.isFinite(health?.checked_at_ms)||Math.abs(now-health.checked_at_ms)>5000)return unavailable('baseline_status_not_fresh');
   if(health.status!=='fresh')return unavailable(`baseline_${health.status||'unavailable'}`);
   if(health.grid_binding?.status!=='active'||!Array.isArray(health.sequence_fault_node_ids)||health.sequence_fault_node_ids.length)return unavailable('baseline_grid_or_sequence_fault');
+  if(receipt?.kind==='calibrated_presence_failed_trials'&&
+    ['model_id','session_id','boot_epoch','binding_digest'].every(k=>receipt[k]===health[k])&&
+    health.source_node_ids?.length===1&&receipt.node_id===health.source_node_ids[0])return unavailable('failed_independent_presence_trials');
   const e=frame.calibrated_presence_evidence;
   if(e?.schema!=='ruview.calibration.calibrated-presence-evidence.v2'||typeof e.presence!=='boolean')return unavailable('calibrated_evidence_missing');
   if(!['model_id','session_id','boot_epoch','binding_digest'].every(k=>typeof e[k]==='string'&&e[k]&&e[k]===health[k]))return unavailable('baseline_identity_mismatch');
