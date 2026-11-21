@@ -16,7 +16,7 @@ The target hardware and software stack are confirmed:
 - ESP-IDF v5.4, built with RuView's display-less DevKitC configuration overlay
 
 The build integration pins RuView commit
-`f783df234eec22929b88e256422cbfc50579196b` in `ruview.lock.json`. The
+`a1754774a975a775c55dd4519f588eaba9ba1857` (firmware 0.8.18) in `ruview.lock.json`. The
 `scripts/Sync-RuView.ps1` helper sparsely fetches only the firmware subtree into
 the ignored `.deps/` directory, so builds are reproducible without copying
 upstream source into this repository.
@@ -172,6 +172,21 @@ Network names, credentials, Pi addresses, node identities, and room-specific
 placement remain outside Git. The dashboard must remain usable on the portable
 router network without cloud or internet access.
 
+### Raspberry Pi one-node stack
+
+`deploy/pi/` contains the supported local deployment. The sensing server image
+is pinned by manifest digest, forced to the ESP32 input source, and protected by
+a required local API token. Its HTTP and WebSocket ports bind to loopback by
+default; only dashboard TCP 8080 and ESP32 ingest UDP 5005 are LAN-facing.
+
+Follow [PI_ONE_NODE_BRINGUP.md](PI_ONE_NODE_BRINGUP.md) from a clean Pi 5. Prove
+one node with `deploy/pi/verify.sh --expect-live` and complete a stability soak
+before adding another node. The server-image lock is separate from the firmware
+lock because upstream did not publish an image for the exact firmware commit;
+the server image is pinned separately to commit
+`094e1400719ded1283c67d23b9c737f6738a3244`. The firmware release commit
+is an ancestor of that server revision; verify compatibility with one live node.
+
 ---
 
 ## 4. Hardware
@@ -206,6 +221,7 @@ commit pinned in `ruview.lock.json`.
 | OTA application 0    | `0x020000` | `0x200000` |
 | OTA application 1    | `0x220000` | `0x200000` |
 | SPIFFS               | `0x420000` | `0x1E0000` |
+| FAT storage           | `0x600000` | `0x200000` |
 
 ### Pin map
 
@@ -246,11 +262,15 @@ hardware that can force their boot-time levels without a deliberate design revie
 
 - Builds the exact RuView commit from `ruview.lock.json` in
   `espressif/idf:v5.4` and uploads the generated package.
+- Validates the generated flash manifest, four reviewed offsets, and SHA-256
+  hashes before uploading the package.
 - Detects the toolchain from files present in the repo.
 - Builds with PlatformIO if `platformio.ini` exists.
 - Builds with ESP-IDF if `CMakeLists.txt` exists **and** the `IDF_VERSION`
   repository variable is set (the version is a deliberate manual choice, not a guess).
 - If neither is present, the job reports "no firmware target configured" and passes.
+- Builds and tests the dashboard, then statically validates the Raspberry Pi
+  Compose configuration and verification script.
 
 The pinned RuView path does not use the `IDF_VERSION` repository variable; its
 container image and display-less DevKitC defaults are declared in the lock and

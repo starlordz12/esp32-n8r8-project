@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/ruvnet/RuView.git",
+  "serverCommit": "094e1400719ded1283c67d23b9c737f6738a3244",
+  "image": {
+    "repository": "ghcr.io/ruvnet/wifi-densepose",
+    "tag": "sha-094e140",
+    "manifestDigest": "sha256:948283a386564eada7fc4d43dd1de492ebf7702a3bb8a0c577872dbc7c605333",
+    "platformDigests": {
+      "linux/amd64": "sha256:43cf4a55ed7099152eaf2f3158d7e9934fd5d35198732335451227ec02f14d78",
+      "linux/arm64": "sha256:52a2a3dfe1bc2c40251e7ac37f9f339a8dba93d2f479190efdc4b8de947bcf87"
+    }
+  },
+  "firmwareCompatibility": {
+    "firmwareCommit": "a1754774a975a775c55dd4519f588eaba9ba1857",
+    "basis": "The firmware release commit is an ancestor of the pinned server image commit; runtime compatibility still requires one-node verification."
+  }
+}
