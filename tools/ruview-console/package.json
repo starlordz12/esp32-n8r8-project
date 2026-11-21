@@ -1,0 +1,16 @@
+{
+  "name": "ruview-local-activity-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node console.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "8.23.0"
+  }
+}
