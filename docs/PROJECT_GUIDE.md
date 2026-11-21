@@ -172,6 +172,117 @@ Network names, credentials, Pi addresses, node identities, and room-specific
 placement remain outside Git. The dashboard must remain usable on the portable
 router network without cloud or internet access.
 
+### Preparation before connecting nodes
+
+Complete these checks while internet access is available:
+
+- Run the local build above, or download the firmware artifact from a successful
+  repository CI run. Confirm that run uses the same `ruview.lock.json` and build
+  scripts as the checkout being deployed. Do not substitute upstream release
+  binaries: they may lack the display-less overlay.
+- Verify all four binary files against the package's `SHA256SUMS.txt`. Check
+  `flasher_args.json` against Section 4: ESP32-S3, DIO, 80 MHz, 8 MB flash, and
+  the four documented offsets. Keep the package and checksums together under
+  ignored `artifacts/`.
+- The packaged binaries are flattened into one directory. Generated
+  `flash_args` and `flasher_args.json` still refer to build-tree subdirectories
+  for the bootloader and partition table. Do not pass these files directly to
+  esptool from the package directory; use the explicit mapping in Section 4
+  with the actual packaged file paths.
+- Confirm Python 3.10+ and esptool 5.x are available. Upstream `provision.py`
+  also needs `esp-idf-nvs-partition-gen`. Install these into an ignored local
+  virtual environment, and check `python -X utf8 provision.py --help` without a
+  board attached. Use `-X utf8` for provisioning on Windows as well: the pinned
+  script's Unicode output can fail with the default legacy console encoding.
+- Run `npm.cmd ci`, `npm.cmd test`, and `npm.cmd run lint` in
+  `demo/dashboard/`. The tests use a local mock service; no physical sensor is
+  required. Allow local networking for the integration test.
+- Confirm the factory recovery backup is accessible outside Git. A CI firmware
+  package is not a replacement for that backup.
+
+### Raspberry Pi preparation
+
+These are preparation instructions; a successful firmware CI build does not
+validate the Pi server or its ARM build. Confirm the Pi operating system,
+architecture, free disk space, and Docker availability on the actual Pi first.
+
+1. Connect the Pi 5 to the portable router by Ethernet. Reserve its address in
+   the router, and use a 2.4 GHz network reachable by the nodes. Disable client
+   isolation between the node network and Pi. Keep the actual network settings
+   in local configuration.
+2. Prepare a separate full checkout of RuView at the commit in
+   `ruview.lock.json`, including its pinned submodules. The firmware-only
+   `.deps/RuView` sparse checkout is insufficient for building the server.
+   Inspect submodule access and resolve any missing dependencies before the
+   hardware session; do not silently advance dependencies to newer commits.
+3. The pinned upstream server build is `docker/Dockerfile.rust`, with the full
+   RuView checkout as build context. Build it natively on the Pi, for example
+   `docker build -f docker/Dockerfile.rust -t ruview-kit:local .`. This also
+   builds additional upstream services and may take considerable time. Treat
+   ARM compatibility and the resulting image as unverified until it succeeds.
+4. On the Pi's Linux Docker host, start only the sensing service:
+
+   ```sh
+   docker run --rm --name ruview-kit --network host \
+     -e CSI_SOURCE=esp32 -e RUVIEW_BIND_ADDR=127.0.0.1 \
+     ruview-kit:local
+   ```
+
+   Host networking makes UDP 5005 reachable without a container port mapping;
+   the HTTP service remains on loopback. This command targets Linux on the Pi,
+   not Docker Desktop on Windows. Check the Pi firewall permits node traffic to
+   UDP 5005. The pinned entrypoint selects HTTP 3000 and WebSocket 3001.
+5. On the Pi, request `http://127.0.0.1:3000/health` and
+   `http://127.0.0.1:3000/api/v1/sensing/latest`. Before nodes are connected,
+   waiting/offline/no-data responses are expected. They do not demonstrate CSI
+   reception. Use explicit `esp32` source mode for the hardware session.
+6. Run the dashboard on the Pi with Node.js 22.13 or later. Set its ignored
+   `.dev.vars` to the loopback server origin above, using `.dev.vars.example`.
+   Start with `npm run dev -- --host 0.0.0.0` on the trusted kit network; use
+   the URL and port printed by the development server. This is a development
+   launch, not a validated kiosk service. Verify the browser's snapshot endpoint
+   works and displays preview/waiting/offline until real frames arrive.
+7. Install dependencies before disconnecting internet access. Rehearse loading
+   the dashboard over the router with internet disconnected. Access from a
+   second device, ARM runtime support, automatic startup, and offline operation
+   still require verification on the Pi.
+
+### First-node session checklist
+
+Use one board until the complete path works. Keep per-node notes, provisioning
+state, and logs outside Git.
+
+- [ ] Locate the verified factory backup and checksum-verified build package.
+- [ ] Start the Pi sensing service in `esp32` mode and the dashboard. Confirm
+      UDP 5005 is available and the dashboard is explicitly non-live.
+- [ ] Connect one board through the USB-C connector labeled `COM`, using a
+      data-capable cable and one power source. Select its serial device locally.
+- [ ] Flash the four verified images using Section 4's explicit offsets and
+      flash settings. Check esptool completes verification successfully. Do not
+      erase the whole flash as a routine preparation step.
+- [ ] Use the pinned firmware's `provision.py` to write Wi-Fi settings, the Pi
+      target address, UDP target port 5005, and a unique node ID into NVS.
+      Follow its `--help`; keep credentials out of saved shell history and logs.
+      Run provisioning from an ignored local working directory: upstream can
+      write `nvs_config.csv` containing credentials if binary generation fails,
+      and `--dry-run` also writes provisioning output and persistent state.
+- [ ] Monitor at 115200 baud. Confirm successful boot, the intended node ID,
+      Wi-Fi connection, and active CSI capture. If automatic bootloader entry
+      fails, use the BOOT/RST fallback in Section 4.
+- [ ] Confirm UDP packets reach the Pi, then confirm the latest API response
+      contains that node and advances over time. Packet arrival alone does not
+      prove the server can decode the data.
+- [ ] Confirm the dashboard switches to live with the expected node. Allow the
+      upstream ambient-learning period in an empty room before comparing empty
+      room and movement responses. Treat these as heuristic demonstrations.
+- [ ] Run a 10-minute initial soak; note resets, dropouts, and whether updates
+      continue. This is an initial acceptance check, not long-term validation.
+- [ ] Disconnect the node and confirm the dashboard leaves live mode once the
+      server marks frames stale (the pinned server uses a five-second rule,
+      plus dashboard polling latency). Reconnect and confirm recovery.
+- [ ] Only after these checks pass, repeat with additional unique node IDs,
+      then begin room placement and calibration.
+
 ---
 
 ## 4. Hardware
